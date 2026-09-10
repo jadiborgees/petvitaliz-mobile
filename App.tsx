@@ -1,20 +1,29 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+
+import LoginScreen from './src/screens/public/LoginScreen';
+import RegisterScreen from './src/screens/public/RegisterScreen';
+import ForgotPasswordScreen from './src/screens/public/ForgotPasswordScreen';
+import EmailSentScreen from './src/screens/public/EmailSentScreen';
+import NewPasswordScreen from './src/screens/public/NewPasswordScreen';
+import PasswordChangedScreen from './src/screens/public/PasswordChangedScreen';
 
 export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
-}
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+  });
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return <PasswordChangedScreen />;
+}
