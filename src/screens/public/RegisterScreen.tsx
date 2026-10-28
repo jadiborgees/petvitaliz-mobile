@@ -20,7 +20,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 interface RegisterScreenProps {
   onRegisterSuccess?: () => void;
   onNavigateToLogin?: () => void;
+  onNavigateToTerms?: () => void;
+  onNavigateToPrivacy?: () => void;
   onBack?: () => void;
+  registeredEmails?: string[];
+  onRegisterUser?: (email: string) => void;
 }
 
 interface Country {
@@ -41,7 +45,11 @@ const COUNTRIES: Country[] = [
 export default function RegisterScreen({
   onRegisterSuccess,
   onNavigateToLogin,
+  onNavigateToTerms,
+  onNavigateToPrivacy,
   onBack,
+  registeredEmails = [],
+  onRegisterUser,
 }: RegisterScreenProps) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
@@ -60,9 +68,14 @@ export default function RegisterScreen({
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Mensagem de erro geral
+  const [generalError, setGeneralError] = useState('');
+
   // Validação de e-mail em tempo real
   const handleEmailChange = (text: string) => {
     setEmail(text);
+    if (generalError) setGeneralError('');
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (text.length > 0 && !emailRegex.test(text)) {
       setEmailError('Insira um e-mail válido (ex: voce@email.com)');
@@ -94,23 +107,59 @@ export default function RegisterScreen({
   };
 
   const handleRegister = () => {
+    setGeneralError('');
+
     if (!nome.trim() || !email.trim() || !dataNascimento || !celular.trim() || !senha) {
-      Alert.alert('Campos incompletos', 'Por favor, preencha todos os campos.');
+      setGeneralError('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
     if (emailError) {
-      Alert.alert('E-mail inválido', 'Corrija o formato do e-mail antes de continuar.');
+      setGeneralError('Corrija o formato do e-mail antes de continuar.');
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (registeredEmails.includes(cleanEmail)) {
+      setGeneralError('Este e-mail já está cadastrado em nossa plataforma.');
       return;
     }
 
     if (!isPasswordValid) {
-      Alert.alert('Senha fraca', 'A senha não atende a todos os requisitos de segurança.');
+      setGeneralError('A senha não atende a todos os requisitos de segurança.');
       return;
     }
 
-    Alert.alert('Sucesso', 'Conta criada com sucesso!');
-    if (onRegisterSuccess) onRegisterSuccess();
+    // Registra o e-mail na lista global
+    if (onRegisterUser) {
+      onRegisterUser(cleanEmail);
+    }
+
+    const navigateToNextScreen = () => {
+      if (onRegisterSuccess) {
+        onRegisterSuccess();
+      } else if (onNavigateToLogin) {
+        onNavigateToLogin();
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      alert('Conta criada com sucesso!');
+      navigateToNextScreen();
+    } else {
+      Alert.alert(
+        'Sucesso',
+        'Conta criada com sucesso!',
+        [
+          {
+            text: 'OK',
+            onPress: navigateToNextScreen,
+          },
+        ],
+        { cancelable: false }
+      );
+    }
   };
 
   return (
@@ -152,6 +201,13 @@ export default function RegisterScreen({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {generalError ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
+              <Text style={styles.errorBoxText}>{generalError}</Text>
+            </View>
+          ) : null}
+
           {/* Nome completo */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Nome completo</Text>
@@ -233,7 +289,7 @@ export default function RegisterScreen({
             </View>
           </View>
 
-          {/* Senha com olho e validações */}
+          {/* Senha */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Senha</Text>
             <View style={styles.iconInputContainer}>
@@ -279,18 +335,44 @@ export default function RegisterScreen({
 
           {/* Botão Principal */}
           <TouchableOpacity
-            style={[styles.primaryButton, !isPasswordValid && senha.length > 0 ? styles.buttonDisabled : null]}
+            style={[
+              styles.primaryButton,
+              !isPasswordValid && senha.length > 0 ? styles.buttonDisabled : null,
+            ]}
             onPress={handleRegister}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryButtonText}>Criar conta</Text>
           </TouchableOpacity>
 
+          {/* Divisor */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>ou continue com</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Botão Continuar com Google */}
+          <TouchableOpacity style={styles.googleButton} activeOpacity={0.85}>
+            <Image
+              source={require('../../assets/iconGoogle.png')}
+              style={styles.googleIcon}
+              resizeMode="contain"
+            />
+            <Text style={styles.googleButtonText}>Continuar com Google</Text>
+          </TouchableOpacity>
+
           {/* Termos Legais */}
           <Text style={styles.legalNotice}>
             Ao continuar, você concorda com os{' '}
-            <Text style={styles.legalLink}>Termos de Uso</Text>
-            {'\n'}e a <Text style={styles.legalLink}>Política de Privacidade</Text>.
+            <Text style={styles.legalLink} onPress={onNavigateToTerms}>
+              Termos de Uso
+            </Text>{' '}
+            e a{' '}
+            <Text style={styles.legalLink} onPress={onNavigateToPrivacy}>
+              Política de Privacidade
+            </Text>
+            .
           </Text>
         </ScrollView>
       </View>
@@ -356,6 +438,16 @@ const styles = StyleSheet.create({
   loginLink: { fontSize: 13, fontWeight: '700', color: '#FFFFFF', textDecorationLine: 'underline' },
   card: { flex: 1, backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 22, paddingTop: 24 },
   scrollContent: { paddingBottom: 30 },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  errorBoxText: { fontSize: 12, color: '#DC2626', fontWeight: '600', flex: 1 },
   fieldGroup: { marginBottom: 14 },
   label: { fontSize: 13, fontWeight: '700', color: '#2A3342', marginBottom: 6 },
   input: {
@@ -418,7 +510,31 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   primaryButtonText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
-  legalNotice: { textAlign: 'center', fontSize: 11, color: '#7B8497', marginTop: 20, lineHeight: 16 },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E1E6F0' },
+  dividerText: { marginHorizontal: 10, fontSize: 11, color: '#7B8497' },
+  googleButton: {
+    flexDirection: 'row',
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E1E6F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+  },
+  googleButtonText: { fontSize: 13, fontWeight: '700', color: '#2A3342' },
+  legalNotice: { textAlign: 'center', fontSize: 11, color: '#7B8497', marginTop: 8, lineHeight: 16 },
   legalLink: { fontWeight: '700', color: '#21479B' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '50%' },

@@ -47,14 +47,18 @@ export default function ProfileScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Topo Azul com Avatar */}
+        {/* Topo Azul com Botão Voltar, Título, Engrenagem e Avatar */}
         <View style={styles.topHeaderSection}>
           <View style={styles.headerTitleRow}>
             <TouchableOpacity onPress={onBack || onNavigateToHome} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
+
             <Text style={styles.headerTitle}>Perfil</Text>
-            <View style={{ width: 22 }} />
+
+            <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7}>
+              <Ionicons name="settings-sharp" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.avatarContainer}>
@@ -64,13 +68,14 @@ export default function ProfileScreen({
           </View>
         </View>
 
-        {/* Mensagem de Boas-vindas */}
+        {/* Mensagem de Boas-vindas e Botões */}
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeTitle}>Olá!</Text>
           <Text style={styles.welcomeSubtitle}>
             Entre na sua conta para acessar seus pets e planos.
           </Text>
 
+          {/* Botão Entrar */}
           <TouchableOpacity
             style={styles.loginButton}
             onPress={onNavigateToLogin}
@@ -85,6 +90,7 @@ export default function ProfileScreen({
             <View style={styles.dividerLine} />
           </View>
 
+          {/* Botão Cadastre-se */}
           <TouchableOpacity
             style={styles.registerButton}
             onPress={onNavigateToRegister}
@@ -146,7 +152,7 @@ export default function ProfileScreen({
         </View>
       </ScrollView>
 
-      {/* Bottom Bar */}
+      {/* Menu Inferior */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.bottomTab} onPress={onNavigateToHome} activeOpacity={0.7}>
           <Ionicons name="home-outline" size={22} color="#94A3B8" />
@@ -199,6 +205,14 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
+  settingsButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarContainer: {
     position: 'absolute',
     bottom: -40,

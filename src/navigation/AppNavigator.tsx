@@ -21,6 +21,14 @@ import {
   ResetPasswordScreen,
 } from '../screens/public';
 
+import {
+  PrivateHomeScreen,
+  PrivateExploreScreen,
+  NoPlanScreen,
+  PrivateServicesScreen,
+  PetTipsScreen,
+} from '../screens/private';
+
 type ScreenName =
   | 'home'
   | 'services'
@@ -38,12 +46,25 @@ type ScreenName =
   | 'forgotPassword'
   | 'emailSent'
   | 'verifyCode'
-  | 'resetPassword';
+  | 'resetPassword'
+  | 'privateHome'
+  | 'privateExplore'
+  | 'noPlan'
+  | 'privateServices'
+  | 'petTips';
 
 export default function AppNavigator() {
   const [isShowSplash, setIsShowSplash] = useState(true);
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
-  const [registeredEmails] = useState<string[]>(['teste@petvitaliz.com']);
+  const [registeredEmails, setRegisteredEmails] = useState<string[]>([
+    'teste@petvitaliz.com',
+  ]);
+
+  const handleRegisterUser = (newEmail: string) => {
+    if (!registeredEmails.includes(newEmail)) {
+      setRegisteredEmails((prev) => [...prev, newEmail]);
+    }
+  };
 
   if (isShowSplash) {
     return <SplashScreen onFinish={() => setIsShowSplash(false)} />;
@@ -51,6 +72,8 @@ export default function AppNavigator() {
 
   return (
     <View style={styles.container}>
+      {/* --- TELAS PÚBLICAS --- */}
+
       {currentScreen === 'home' && (
         <HomeScreen
           onNavigateToLogin={() => setCurrentScreen('login')}
@@ -182,6 +205,7 @@ export default function AppNavigator() {
 
       {currentScreen === 'login' && (
         <LoginScreen
+          onLoginSuccess={() => setCurrentScreen('privateHome')}
           onNavigateToRegister={() => setCurrentScreen('register')}
           onNavigateToForgotPassword={() => setCurrentScreen('forgotPassword')}
           onBack={() => setCurrentScreen('home')}
@@ -190,8 +214,13 @@ export default function AppNavigator() {
 
       {currentScreen === 'register' && (
         <RegisterScreen
+          onRegisterSuccess={() => setCurrentScreen('login')}
           onNavigateToLogin={() => setCurrentScreen('login')}
-          onBack={() => setCurrentScreen('home')}
+          onNavigateToTerms={() => setCurrentScreen('terms')}
+          onNavigateToPrivacy={() => setCurrentScreen('privacy')}
+          onBack={() => setCurrentScreen('profile')}
+          registeredEmails={registeredEmails}
+          onRegisterUser={handleRegisterUser}
         />
       )}
 
@@ -222,6 +251,63 @@ export default function AppNavigator() {
         <ResetPasswordScreen
           onNavigateToLogin={() => setCurrentScreen('login')}
           onBack={() => setCurrentScreen('verifyCode')}
+        />
+      )}
+
+      {/* --- TELAS PRIVADAS --- */}
+
+      {currentScreen === 'privateHome' && (
+        <PrivateHomeScreen
+          onNavigateToServices={() => setCurrentScreen('privateServices')}
+          onNavigateToPlans={() => setCurrentScreen('noPlan')}
+          onNavigateToExplore={() => setCurrentScreen('privateExplore')}
+          onNavigateToBenefits={() => setCurrentScreen('benefits')}
+          onNavigateToProfile={() => setCurrentScreen('profile')}
+          onNavigateToSupport={() => setCurrentScreen('support')}
+          onNavigateToTips={() => setCurrentScreen('petTips')}
+        />
+      )}
+
+      {currentScreen === 'privateServices' && (
+        <PrivateServicesScreen
+          onBack={() => setCurrentScreen('privateHome')}
+          onNavigateToHome={() => setCurrentScreen('privateHome')}
+          onNavigateToExplore={() => setCurrentScreen('privateExplore')}
+          onNavigateToPlans={() => setCurrentScreen('noPlan')}
+          onNavigateToBenefits={() => setCurrentScreen('benefits')}
+          onNavigateToProfile={() => setCurrentScreen('profile')}
+        />
+      )}
+
+      {currentScreen === 'petTips' && (
+        <PetTipsScreen
+          onBack={() => setCurrentScreen('privateHome')}
+          onNavigateToHome={() => setCurrentScreen('privateHome')}
+          onNavigateToExplore={() => setCurrentScreen('privateExplore')}
+          onNavigateToPlans={() => setCurrentScreen('noPlan')}
+          onNavigateToBenefits={() => setCurrentScreen('benefits')}
+          onNavigateToProfile={() => setCurrentScreen('profile')}
+        />
+      )}
+
+      {currentScreen === 'privateExplore' && (
+        <PrivateExploreScreen
+          onBack={() => setCurrentScreen('privateHome')}
+          onNavigateToHome={() => setCurrentScreen('privateHome')}
+          onNavigateToPlans={() => setCurrentScreen('noPlan')}
+          onNavigateToBenefits={() => setCurrentScreen('benefits')}
+          onNavigateToProfile={() => setCurrentScreen('profile')}
+        />
+      )}
+
+      {currentScreen === 'noPlan' && (
+        <NoPlanScreen
+          onBack={() => setCurrentScreen('privateHome')}
+          onNavigateToHome={() => setCurrentScreen('privateHome')}
+          onNavigateToPlans={() => setCurrentScreen('plans')}
+          onNavigateToExplore={() => setCurrentScreen('privateExplore')}
+          onNavigateToBenefits={() => setCurrentScreen('benefits')}
+          onNavigateToProfile={() => setCurrentScreen('profile')}
         />
       )}
     </View>
