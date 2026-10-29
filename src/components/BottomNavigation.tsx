@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface BottomNavigationProps {
@@ -11,6 +11,31 @@ interface BottomNavigationProps {
   onNavigateToProfile?: () => void;
 }
 
+const ACTIVE_ICON_COLOR = '#FFFFFF';
+const INACTIVE_ICON_COLOR = '#1E293B';
+
+// Wrapper de cada aba: o ícone ativo vira um círculo flutuante
+function Tab({
+  active,
+  label,
+  onPress,
+  children,
+}: {
+  active: boolean;
+  label: string;
+  onPress?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <TouchableOpacity style={styles.tabItem} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.iconSlot}>
+        {active ? <View style={styles.activeCircle}>{children}</View> : children}
+      </View>
+      <Text style={active ? styles.activeTabText : styles.tabText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function BottomNavigation({
   currentRoute,
   onNavigateToHome,
@@ -19,72 +44,55 @@ export default function BottomNavigation({
   onNavigateToBenefits,
   onNavigateToProfile,
 }: BottomNavigationProps) {
+  const color = (route: BottomNavigationProps['currentRoute']) =>
+    currentRoute === route ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR;
+
   return (
     <View style={styles.bottomBar}>
-      <TouchableOpacity
-        style={currentRoute === 'Home' ? styles.activeTab : styles.tabItem}
-        onPress={onNavigateToHome}
-        activeOpacity={0.8}
-      >
+      {/* Home */}
+      <Tab active={currentRoute === 'Home'} label="Home" onPress={onNavigateToHome}>
         <Ionicons
           name={currentRoute === 'Home' ? 'home' : 'home-outline'}
           size={22}
-          color={currentRoute === 'Home' ? '#FFFFFF' : '#21479B'}
+          color={color('Home')}
         />
-        <Text style={currentRoute === 'Home' ? styles.activeTabText : styles.tabText}>Home</Text>
-      </TouchableOpacity>
+      </Tab>
 
-      <TouchableOpacity
-        style={currentRoute === 'Explore' ? styles.activeTab : styles.tabItem}
-        onPress={onNavigateToExplore}
-        activeOpacity={0.8}
-      >
+      {/* Explorar */}
+      <Tab active={currentRoute === 'Explore'} label="Explorar" onPress={onNavigateToExplore}>
         <Ionicons
           name={currentRoute === 'Explore' ? 'search' : 'search-outline'}
           size={22}
-          color={currentRoute === 'Explore' ? '#FFFFFF' : '#94A3B8'}
+          color={color('Explore')}
         />
-        <Text style={currentRoute === 'Explore' ? styles.activeTabText : styles.tabText}>Explorar</Text>
-      </TouchableOpacity>
+      </Tab>
 
-      <TouchableOpacity
-        style={currentRoute === 'Plans' ? styles.activeTab : styles.tabItem}
-        onPress={onNavigateToPlans}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={currentRoute === 'Plans' ? 'ribbon' : 'ribbon-outline'}
-          size={22}
-          color={currentRoute === 'Plans' ? '#FFFFFF' : '#94A3B8'}
+      {/* Plano */}
+      <Tab active={currentRoute === 'Plans'} label="Plano" onPress={onNavigateToPlans}>
+        <Image
+          source={require('../assets/coroa_outline.png')}
+          style={[styles.crownIcon, { tintColor: color('Plans') }]}
+          resizeMode="contain"
         />
-        <Text style={currentRoute === 'Plans' ? styles.activeTabText : styles.tabText}>Plano</Text>
-      </TouchableOpacity>
+      </Tab>
 
-      <TouchableOpacity
-        style={currentRoute === 'Benefits' ? styles.activeTab : styles.tabItem}
-        onPress={onNavigateToBenefits}
-        activeOpacity={0.8}
-      >
+      {/* Benefícios */}
+      <Tab active={currentRoute === 'Benefits'} label="Benefícios" onPress={onNavigateToBenefits}>
         <Ionicons
           name={currentRoute === 'Benefits' ? 'gift' : 'gift-outline'}
           size={22}
-          color={currentRoute === 'Benefits' ? '#FFFFFF' : '#94A3B8'}
+          color={color('Benefits')}
         />
-        <Text style={currentRoute === 'Benefits' ? styles.activeTabText : styles.tabText}>Benefícios</Text>
-      </TouchableOpacity>
+      </Tab>
 
-      <TouchableOpacity
-        style={currentRoute === 'Profile' ? styles.activeTab : styles.tabItem}
-        onPress={onNavigateToProfile}
-        activeOpacity={0.8}
-      >
+      {/* Perfil */}
+      <Tab active={currentRoute === 'Profile'} label="Perfil" onPress={onNavigateToProfile}>
         <Ionicons
           name={currentRoute === 'Profile' ? 'person' : 'person-outline'}
           size={22}
-          color={currentRoute === 'Profile' ? '#FFFFFF' : '#94A3B8'}
+          color={color('Profile')}
         />
-        <Text style={currentRoute === 'Profile' ? styles.activeTabText : styles.tabText}>Perfil</Text>
-      </TouchableOpacity>
+      </Tab>
     </View>
   );
 }
@@ -98,8 +106,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 24,
     alignItems: 'center',
-    justifyContent: 'space-around',
     paddingHorizontal: 8,
+    overflow: 'visible',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
@@ -112,30 +120,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
   },
-  activeTab: {
-    flex: 1,
+  // Espaço fixo do ícone: mantém todos os textos alinhados na mesma altura
+  iconSlot: {
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
+  },
+  // Círculo azul com borda branca, flutuando acima da barra
+  activeCircle: {
+    position: 'absolute',
+    top: -42,
+    left: -17,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#21479B',
-    height: 52,
-    borderRadius: 16,
-    marginTop: -12,
-    shadowColor: '#21479B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    borderWidth: 6,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
     elevation: 6,
+  },
+  crownIcon: {
+    width: 22,
+    height: 22,
   },
   tabText: {
     fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2,
+    color: '#64748B',
+    marginTop: 4,
     fontWeight: '500',
   },
   activeTabText: {
     fontSize: 10,
-    color: '#FFFFFF',
-    marginTop: 2,
+    color: '#0F172A',
+    marginTop: 4,
     fontWeight: '700',
   },
 });
