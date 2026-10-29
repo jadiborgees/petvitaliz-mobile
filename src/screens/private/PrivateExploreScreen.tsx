@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import BottomNavigation from '../../components/BottomNavigation';
 
 interface PrivateHomeScreenProps {
   onNavigateToServices?: () => void;
@@ -101,36 +102,14 @@ export default function PrivateHomeScreen({
         </View>
       </ScrollView>
 
-      {/* Menu Inferior */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomTab} activeOpacity={0.7}>
-          <Ionicons name="home" size={22} color="#21479B" />
-          <Text style={[styles.bottomTabText, styles.bottomTabActive]}>Início</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.bottomTab} onPress={onNavigateToExplore} activeOpacity={0.7}>
-          <Ionicons name="search-outline" size={22} color="#94A3B8" />
-          <Text style={styles.bottomTabText}>Explorar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.bottomTabCenter} onPress={onNavigateToPlans} activeOpacity={0.85}>
-          <Image
-            source={require('../../assets/coroa.png')}
-            style={styles.crownIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.bottomTab} onPress={onNavigateToBenefits} activeOpacity={0.7}>
-          <Ionicons name="gift-outline" size={22} color="#94A3B8" />
-          <Text style={styles.bottomTabText}>Benefícios</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.bottomTab} onPress={onNavigateToProfile} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={22} color="#94A3B8" />
-          <Text style={styles.bottomTabText}>Perfil</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Componente Global de Navegação */}
+      <BottomNavigation
+        currentRoute="Home"
+        onNavigateToExplore={onNavigateToExplore}
+        onNavigateToPlans={onNavigateToPlans}
+        onNavigateToBenefits={onNavigateToBenefits}
+        onNavigateToProfile={onNavigateToProfile}
+      />
     </SafeAreaView>
   );
 }
@@ -218,32 +197,4 @@ const styles = StyleSheet.create({
   tipCategoryBadge: { fontSize: 10, fontWeight: '800', color: '#21479B', marginBottom: 4 },
   tipPreviewTitle: { fontSize: 13, fontWeight: '700', color: '#1E293B', lineHeight: 18, marginBottom: 4 },
   tipReadTime: { fontSize: 11, color: '#94A3B8' },
-  bottomBar: {
-    flexDirection: 'row',
-    height: 60,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 10,
-  },
-  bottomTab: { alignItems: 'center', justifyContent: 'center' },
-  bottomTabText: { fontSize: 10, color: '#94A3B8', marginTop: 2, fontWeight: '500' },
-  bottomTabActive: { color: '#21479B', fontWeight: '800' },
-  bottomTabCenter: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#1B4298',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -22,
-    elevation: 4,
-    shadowColor: '#1B4298',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  crownIcon: { width: 24, height: 24, tintColor: '#FFFFFF' },
 });
