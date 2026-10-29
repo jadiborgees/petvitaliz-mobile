@@ -35,10 +35,26 @@ export default function LoginScreen({
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = () => {
+    // 1. Validação de campos vazios
     if (!email.trim() || !senha.trim()) {
       Alert.alert('Campos obrigatórios', 'Preencha e-mail e senha para entrar.');
       return;
     }
+
+    // 2. Regra de segurança: Validação de formato de e-mail
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('E-mail inválido', 'Por favor, insira um endereço de e-mail válido.');
+      return;
+    }
+
+    // 3. Validação do tamanho mínimo da senha (ex: 6 caracteres)
+    if (senha.length < 6) {
+      Alert.alert('Senha curta', 'A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    // Se passou por todas as verificações, chama o sucesso (que já faz o reset para a PrivateHome)
     if (onLoginSuccess) onLoginSuccess();
   };
 
