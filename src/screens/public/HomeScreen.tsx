@@ -18,6 +18,7 @@ const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 40;
 
 interface HomeScreenProps {
+  isLoggedIn?: boolean;
   onNavigateToLogin?: () => void;
   onNavigateToRegister?: () => void;
   onNavigateToForgotPassword?: () => void;
@@ -30,6 +31,7 @@ interface HomeScreenProps {
 }
 
 export default function HomeScreen({
+  isLoggedIn = false,
   onNavigateToLogin,
   onNavigateToRegister,
   onNavigateToForgotPassword,
@@ -44,10 +46,8 @@ export default function HomeScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   const totalBanners = 2;
 
-  // Estado para controlar qual plano está selecionado
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  // Efeito para passar o banner sozinho a cada 3 segundos
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentIndex((prevIndex) => {
@@ -67,7 +67,6 @@ export default function HomeScreen({
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Conteúdo Principal com Rolagem Vertical */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -75,8 +74,12 @@ export default function HomeScreen({
         {/* Topo / Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greetingText}>Olá! Bem vindo(a) a PetVitaliz,</Text>
-            <Text style={styles.mainTitle}>O que você procura hoje?</Text>
+            <Text style={styles.greetingText}>
+              {isLoggedIn ? 'Bem-vindo de volta,' : 'Olá! Bem vindo(a) a PetVitaliz,'}
+            </Text>
+            <Text style={styles.mainTitle}>
+              {isLoggedIn ? 'Aqui estão os seus pets e planos' : 'O que você procura hoje?'}
+            </Text>
           </View>
           <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
             <Ionicons name="notifications-outline" size={22} color="#1E293B" />
@@ -109,7 +112,6 @@ export default function HomeScreen({
             />
           </ScrollView>
 
-          {/* Indicadores de Paginação */}
           <View style={styles.paginationDots}>
             {[...Array(totalBanners)].map((_, i) => (
               <View
@@ -123,7 +125,7 @@ export default function HomeScreen({
           </View>
         </View>
 
-        {/* 1. Seção Nossos Planos (4 Planos Completos) */}
+        {/* 1. Seção Nossos Planos */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Nossos Planos</Text>
           <TouchableOpacity onPress={onNavigateToPlans} activeOpacity={0.7}>
@@ -144,9 +146,18 @@ export default function HomeScreen({
           >
             <Text style={selectedPlanId === 'bronze' ? styles.planTag : styles.planTagBasic}>ESSENCIAL</Text>
             <View style={styles.planHeaderRow}>
-              <Text style={selectedPlanId === 'bronze' ? styles.planTitleGold : styles.planTitleBasic}>Plano Bronze</Text>
+              <View style={styles.planTitleContainer}>
+                <View style={selectedPlanId === 'bronze' ? styles.planIconCircleGold : styles.planIconCircleBasic}>
+                  <Image
+                    source={require('../../assets/coroa_outline.png')}
+                    style={[styles.crownIcon, { tintColor: selectedPlanId === 'bronze' ? '#FFFFFF' : '#21479B' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={selectedPlanId === 'bronze' ? styles.planTitleGold : styles.planTitleBasic}>Bronze</Text>
+              </View>
               <View style={styles.planPriceContainer}>
-                <Text style={selectedPlanId === 'bronze' ? styles.planPriceGold : styles.planPriceBasic}>R$89,90</Text>
+                <Text style={selectedPlanId === 'bronze' ? styles.planPriceGold : styles.planPriceBasic}>R$ 139,90</Text>
                 <Text style={selectedPlanId === 'bronze' ? styles.planPeriodGold : styles.planPeriodBasic}>/mês</Text>
               </View>
             </View>
@@ -158,7 +169,7 @@ export default function HomeScreen({
               </View>
               <View style={styles.featureItem}>
                 <Ionicons name="checkmark-circle" size={16} color={selectedPlanId === 'bronze' ? '#A3C0F5' : '#10B981'} />
-                <Text style={selectedPlanId === 'bronze' ? styles.featureTextGold : styles.featureTextBasic}>Carteira de vacinação digital</Text>
+                <Text style={selectedPlanId === 'bronze' ? styles.featureTextGold : styles.featureTextBasic}>Vacinação digital</Text>
                 <Text style={selectedPlanId === 'bronze' ? styles.featureCountGold : styles.featureCountBasic}>Incluso</Text>
               </View>
             </View>
@@ -175,9 +186,18 @@ export default function HomeScreen({
           >
             <Text style={selectedPlanId === 'prata' ? styles.planTag : styles.planTagBasic}>POPULAR</Text>
             <View style={styles.planHeaderRow}>
-              <Text style={selectedPlanId === 'prata' ? styles.planTitleGold : styles.planTitleBasic}>Plano Prata</Text>
+              <View style={styles.planTitleContainer}>
+                <View style={selectedPlanId === 'prata' ? styles.planIconCircleGold : styles.planIconCircleBasic}>
+                  <Image
+                    source={require('../../assets/coroa_outline.png')}
+                    style={[styles.crownIcon, { tintColor: selectedPlanId === 'prata' ? '#FFFFFF' : '#21479B' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={selectedPlanId === 'prata' ? styles.planTitleGold : styles.planTitleBasic}>Prata</Text>
+              </View>
               <View style={styles.planPriceContainer}>
-                <Text style={selectedPlanId === 'prata' ? styles.planPriceGold : styles.planPriceBasic}>R$139,90</Text>
+                <Text style={selectedPlanId === 'prata' ? styles.planPriceGold : styles.planPriceBasic}>R$ 219,90</Text>
                 <Text style={selectedPlanId === 'prata' ? styles.planPeriodGold : styles.planPeriodBasic}>/mês</Text>
               </View>
             </View>
@@ -209,9 +229,18 @@ export default function HomeScreen({
             </View>
             <Text style={selectedPlanId === 'ouro' ? styles.planTag : styles.planTagBasic}>MAIS COMPLETO</Text>
             <View style={styles.planHeaderRow}>
-              <Text style={selectedPlanId === 'ouro' ? styles.planTitleGold : styles.planTitleBasic}>Plano Ouro</Text>
+              <View style={styles.planTitleContainer}>
+                <View style={selectedPlanId === 'ouro' ? styles.planIconCircleGold : styles.planIconCircleBasic}>
+                  <Image
+                    source={require('../../assets/coroa_outline.png')}
+                    style={[styles.crownIcon, { tintColor: selectedPlanId === 'ouro' ? '#FFFFFF' : '#21479B' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={selectedPlanId === 'ouro' ? styles.planTitleGold : styles.planTitleBasic}>Ouro</Text>
+              </View>
               <View style={styles.planPriceContainer}>
-                <Text style={selectedPlanId === 'ouro' ? styles.planPriceGold : styles.planPriceBasic}>R$399,90</Text>
+                <Text style={selectedPlanId === 'ouro' ? styles.planPriceGold : styles.planPriceBasic}>R$ 399,90</Text>
                 <Text style={selectedPlanId === 'ouro' ? styles.planPeriodGold : styles.planPeriodBasic}>/mês</Text>
               </View>
             </View>
@@ -240,16 +269,25 @@ export default function HomeScreen({
           >
             <Text style={selectedPlanId === 'diamante' ? styles.planTag : styles.planTagBasic}>VIP PREMIUM</Text>
             <View style={styles.planHeaderRow}>
-              <Text style={selectedPlanId === 'diamante' ? styles.planTitleGold : styles.planTitleBasic}>Diamante</Text>
+              <View style={styles.planTitleContainer}>
+                <View style={selectedPlanId === 'diamante' ? styles.planIconCircleGold : styles.planIconCircleBasic}>
+                  <Image
+                    source={require('../../assets/coroa_outline.png')}
+                    style={[styles.crownIcon, { tintColor: selectedPlanId === 'diamante' ? '#FFFFFF' : '#21479B' }]}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={selectedPlanId === 'diamante' ? styles.planTitleGold : styles.planTitleBasic}>Diamante</Text>
+              </View>
               <View style={styles.planPriceContainer}>
-                <Text style={selectedPlanId === 'diamante' ? styles.planPriceGold : styles.planPriceBasic}>R$599,90</Text>
+                <Text style={selectedPlanId === 'diamante' ? styles.planPriceGold : styles.planPriceBasic}>R$ 649,90</Text>
                 <Text style={selectedPlanId === 'diamante' ? styles.planPeriodGold : styles.planPeriodBasic}>/mês</Text>
               </View>
             </View>
             <View style={styles.featuresList}>
               <View style={styles.featureItem}>
                 <Ionicons name="checkmark-circle" size={16} color={selectedPlanId === 'diamante' ? '#A3C0F5' : '#10B981'} />
-                <Text style={selectedPlanId === 'diamante' ? styles.featureTextGold : styles.featureTextBasic}>Atendimento VIP & Home Care</Text>
+                <Text style={selectedPlanId === 'diamante' ? styles.featureTextGold : styles.featureTextBasic}>Atendimento VIP</Text>
                 <Text style={selectedPlanId === 'diamante' ? styles.featureCountGold : styles.featureCountBasic}>Ilimitado</Text>
               </View>
               <View style={styles.featureItem}>
@@ -277,43 +315,43 @@ export default function HomeScreen({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          <View style={styles.serviceItem}>
+          <TouchableOpacity style={styles.serviceItem} onPress={onNavigateToServices} activeOpacity={0.85}>
             <View style={[styles.serviceCircle, { backgroundColor: '#80D8B6' }]}>
               <Ionicons name="cut-outline" size={24} color="#FFFFFF" />
             </View>
             <Text style={styles.serviceLabel}>Banho e Tosa</Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.serviceItem}>
+          <TouchableOpacity style={styles.serviceItem} onPress={onNavigateToServices} activeOpacity={0.85}>
             <View style={[styles.serviceCircle, { backgroundColor: '#7FB3E8' }]}>
               <Ionicons name="flask-outline" size={24} color="#FFFFFF" />
             </View>
             <Text style={styles.serviceLabel}>Exames</Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.serviceItem}>
+          <TouchableOpacity style={styles.serviceItem} onPress={onNavigateToServices} activeOpacity={0.85}>
             <View style={[styles.serviceCircle, { backgroundColor: '#F0937A' }]}>
               <Ionicons name="medical-outline" size={24} color="#FFFFFF" />
             </View>
             <Text style={styles.serviceLabel}>Vacinação</Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.serviceItem}>
+          <TouchableOpacity style={styles.serviceItem} onPress={onNavigateToServices} activeOpacity={0.85}>
             <View style={[styles.serviceCircle, { backgroundColor: '#E88DA3' }]}>
               <Ionicons name="time-outline" size={24} color="#FFFFFF" />
             </View>
             <Text style={styles.serviceLabel}>Emergência 24h</Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.serviceItem}>
+          <TouchableOpacity style={styles.serviceItem} onPress={onNavigateToServices} activeOpacity={0.85}>
             <View style={[styles.serviceCircle, { backgroundColor: '#EBE3AA' }]}>
               <Ionicons name="car-sport-outline" size={24} color="#21479B" />
             </View>
             <Text style={styles.serviceLabel}>Leva & Traz Pet</Text>
-          </View>
+          </TouchableOpacity>
         </ScrollView>
 
-        {/* 3. Seção Como Funciona (Com Imagens .jpg) */}
+        {/* 3. Seção Como Funciona */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Como Funciona</Text>
           <TouchableOpacity onPress={onNavigateToHowItWorks} activeOpacity={0.7}>
@@ -326,40 +364,40 @@ export default function HomeScreen({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          <TouchableOpacity style={styles.stepImageCard} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
             <Image
               source={require('../../assets/step1.jpg')}
-              style={styles.stepCardImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.stepImageTitle}>1. Escolha seu plano</Text>
+            <Text style={styles.cardTitle}>1. Escolha seu plano</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.stepImageCard} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
             <Image
               source={require('../../assets/step2.jpg')}
-              style={styles.stepCardImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.stepImageTitle}>2. Agende serviços</Text>
+            <Text style={styles.cardTitle}>2. Agende serviços</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.stepImageCard} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
             <Image
               source={require('../../assets/step3.jpg')}
-              style={styles.stepCardImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.stepImageTitle}>3. Cuide do seu pet</Text>
+            <Text style={styles.cardTitle}>3. Cuide do seu pet</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.stepImageCard} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToHowItWorks} activeOpacity={0.85}>
             <Image
               source={require('../../assets/step4.jpg')}
-              style={styles.stepCardImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.stepImageTitle}>4. Aproveite vantagens</Text>
+            <Text style={styles.cardTitle}>4. Aproveite vantagens</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -376,22 +414,22 @@ export default function HomeScreen({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          <TouchableOpacity style={styles.tipCardContainer} onPress={onNavigateToExplore} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToExplore} activeOpacity={0.85}>
             <Image
               source={require('../../assets/Dog1.png')}
-              style={styles.tipBannerImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.tipTitle}>Como escovar os dentes do seu pet</Text>
+            <Text style={styles.cardTitle}>Como escovar os dentes do seu pet</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tipCardContainer} onPress={onNavigateToExplore} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.cardContainer} onPress={onNavigateToExplore} activeOpacity={0.85}>
             <Image
               source={require('../../assets/Dog2.png')}
-              style={styles.tipBannerImage}
+              style={styles.cardImage}
               resizeMode="cover"
             />
-            <Text style={styles.tipTitle}>Sinais de que é hora do banho</Text>
+            <Text style={styles.cardTitle}>Sinais de que é hora do banho</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -518,6 +556,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
+  planTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  planIconCircleGold: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planIconCircleBasic: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#F0F5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crownIcon: {
+    width: 16,
+    height: 16,
+  },
   planTitleGold: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
   planTitleBasic: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
   planPriceContainer: { alignItems: 'flex-end' },
@@ -558,8 +617,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   serviceLabel: { fontSize: 10, fontWeight: '600', color: '#475569', textAlign: 'center' },
-  stepImageCard: {
-    width: 160,
+  cardContainer: {
+    width: 170,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 8,
@@ -567,21 +626,19 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     alignItems: 'center',
   },
-  stepCardImage: {
-    width: 144,
-    height: 90,
+  cardImage: {
+    width: 152,
+    height: 95,
     borderRadius: 12,
     marginBottom: 8,
   },
-  stepImageTitle: {
+  cardTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#334155',
     textAlign: 'center',
+    lineHeight: 15,
   },
-  tipCardContainer: { width: 170 },
-  tipBannerImage: { width: 170, height: 95, borderRadius: 16, marginBottom: 8 },
-  tipTitle: { fontSize: 11, fontWeight: '700', color: '#334155', lineHeight: 15 },
   supportCard: {
     flexDirection: 'row',
     alignItems: 'center',

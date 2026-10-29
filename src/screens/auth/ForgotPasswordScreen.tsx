@@ -13,29 +13,77 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-interface LoginScreenProps {
-  onLoginSuccess?: () => void;
-  onNavigateToRegister?: () => void;
-  onNavigateToForgotPassword?: () => void;
+interface ForgotPasswordScreenProps {
+  registeredEmails?: string[];
+  onNavigateToLogin?: () => void;
+  onCodeSent?: (email: string) => void;
   onBack?: () => void;
 }
 
-export default function LoginScreen({
-  onLoginSuccess,
-  onNavigateToRegister,
-  onNavigateToForgotPassword,
+export default function ForgotPasswordScreen({
+  registeredEmails = [],
+  onNavigateToLogin,
+  onCodeSent,
   onBack,
-}: LoginScreenProps) {
+}: ForgotPasswordScreenProps) {
   const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
-  const handleLogin = () => {
-    if (!email.trim() || !senha.trim()) {
-      Alert.alert('Campos obrigatórios', 'Preencha e-mail e senha para entrar.');
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (text.length > 0 && !emailRegex.test(text)) {
+      setEmailError('Insira um e-mail válido (ex: voce@email.com)');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  const handleSendCode = () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      Alert.alert('Campo obrigatório', 'Informe o seu e-mail para continuar.');
       return;
     }
-    if (onLoginSuccess) onLoginSuccess();
+
+    if (emailError) {
+      Alert.alert('E-mail inválido', 'Por favor, insira um e-mail válido.');
+      return;
+    }
+
+    // Verifica se o e-mail existe na lista de e-mails cadastrados
+    const emailExists = registeredEmails.some(
+      (e) => e.toLowerCase() === cleanEmail
+    );
+
+    if (!emailExists) {
+      setEmailError('Nenhuma conta encontrada com este e-mail.');
+      Alert.alert(
+        'Conta não encontrada',
+        'Não encontramos nenhuma conta cadastrada com este e-mail. Verifique a digitação ou crie uma nova conta.'
+      );
+      return;
+    }
+
+    // Na web o Alert.alert não executa botões; segue direto para a próxima tela
+    if (Platform.OS === 'web') {
+      if (onCodeSent) onCodeSent(cleanEmail);
+      return;
+    }
+
+    Alert.alert(
+      'Código enviado!',
+      `Enviamos o código de recuperação para: ${cleanEmail}`,
+      [
+        {
+          text: 'Continuar',
+          onPress: () => {
+            if (onCodeSent) onCodeSent(cleanEmail);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -46,7 +94,7 @@ export default function LoginScreen({
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={onBack}
+          onPress={onBack || onNavigateToLogin}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -61,95 +109,64 @@ export default function LoginScreen({
           />
         </View>
 
-        <Text style={styles.title}>Login</Text>
+        <Text style={styles.title}>Recupere sua senha</Text>
         <Text style={styles.subtitle}>
-          Insira seu e-mail e senha para fazer login
+          Informe o e-mail da sua conta para receber o código de recuperação.
         </Text>
       </View>
 
       {/* Card Branco com Formulário */}
       <View style={styles.card}>
-        {/* Campo E-mail */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>E-mail</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="voce@email.com"
-            placeholderTextColor="#AAB1BF"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Campo Senha com olho */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Senha</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="••••••••"
-              placeholderTextColor="#AAB1BF"
-              value={senha}
-              onChangeText={setSenha}
-              secureTextEntry={!showPassword}
+          <View
+            style={[
+              styles.inputContainer,
+              emailError ? styles.inputError : null,
+            ]}
+          >
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color="#7B8497"
+              style={styles.inputLeftIcon}
             />
-            <TouchableOpacity
-              style={styles.eyeIconContainer}
-              onPress={() => setShowPassword(!showPassword)}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                size={20}
-                color="#7B8497"
-              />
-            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              placeholder="voce@email.com"
+              placeholderTextColor="#AAB1BF"
+              value={email}
+              onChangeText={handleEmailChange}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
           </View>
+          {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
         </View>
-
-        <TouchableOpacity
-          onPress={onNavigateToForgotPassword}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.forgotText}>Esqueci minha senha</Text>
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={handleLogin}
+          onPress={handleSendCode}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryButtonText}>Entrar</Text>
+          <Text style={styles.primaryButtonText}>Enviar código</Text>
         </TouchableOpacity>
 
-        <View style={styles.registerRow}>
-          <Text style={styles.mutedText}>Ainda não tem uma conta? </Text>
-          <TouchableOpacity onPress={onNavigateToRegister}>
-            <Text style={styles.linkText}>Criar conta</Text>
+        <View style={styles.loginRow}>
+          <Text style={styles.mutedText}>Lembrou sua senha? </Text>
+          <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.7}>
+            <Text style={styles.linkText}>Entrar</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>ou continue com</Text>
-          <View style={styles.dividerLine} />
+        <View style={styles.infoCard}>
+          <View style={styles.infoIconBadge}>
+            <Ionicons name="mail-outline" size={22} color="#21479B" />
+          </View>
+          <Text style={styles.infoText}>
+            Não recebeu o e-mail? Verifique também a caixa de spam.
+          </Text>
         </View>
-
-        {/* Botão Google com Imagem PNG */}
-        <TouchableOpacity
-          style={styles.googleButton}
-          onPress={() => Alert.alert('Google', 'Integração demonstrativa.')}
-          activeOpacity={0.85}
-        >
-          <Image
-            source={require('../../assets/iconGoogle.png')}
-            style={styles.googleIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.googleButtonText}>Continuar com Google</Text>
-        </TouchableOpacity>
 
         <View style={styles.footerLinks}>
           <TouchableOpacity activeOpacity={0.7}>
@@ -173,7 +190,7 @@ const styles = StyleSheet.create({
   header: {
     paddingTop:
       Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 28,
     paddingBottom: 28,
     alignItems: 'center',
   },
@@ -198,15 +215,17 @@ const styles = StyleSheet.create({
     tintColor: '#FFFFFF',
   },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#DCE4F7',
     textAlign: 'center',
+    lineHeight: 18,
   },
   card: {
     flex: 1,
@@ -218,7 +237,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   fieldGroup: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   label: {
     fontSize: 13,
@@ -226,17 +245,7 @@ const styles = StyleSheet.create({
     color: '#2A3342',
     marginBottom: 6,
   },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E1E6F0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#2A3342',
-    backgroundColor: '#FFFFFF',
-  },
-  passwordContainer: {
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 48,
@@ -244,25 +253,25 @@ const styles = StyleSheet.create({
     borderColor: '#E1E6F0',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    paddingRight: 12,
+    paddingHorizontal: 14,
   },
-  passwordInput: {
+  inputLeftIcon: {
+    marginRight: 10,
+  },
+  input: {
     flex: 1,
     height: '100%',
-    paddingHorizontal: 14,
     fontSize: 14,
     color: '#2A3342',
   },
-  eyeIconContainer: {
-    padding: 6,
+  inputError: {
+    borderColor: '#E53935',
   },
-  forgotText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#21479B',
-    textAlign: 'right',
-    marginTop: 2,
-    marginBottom: 18,
+  errorText: {
+    color: '#E53935',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600',
   },
   primaryButton: {
     height: 50,
@@ -270,13 +279,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B4298',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 4,
   },
   primaryButtonText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
   },
-  registerRow: {
+  loginRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -291,40 +301,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#21479B',
   },
-  dividerRow: {
+  infoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 22,
+    backgroundColor: '#F3F6FD',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 32,
+    gap: 12,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E1E6F0',
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    fontSize: 12,
-    color: '#7B8497',
-  },
-  googleButton: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E1E6F0',
-    flexDirection: 'row',
+  infoIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    gap: 10,
+    borderWidth: 1,
+    borderColor: '#E1E6F0',
   },
-  googleIcon: {
-    width: 20,
-    height: 20,
-  },
-  googleButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#2A3342',
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4A5568',
+    lineHeight: 18,
+    fontWeight: '500',
   },
   footerLinks: {
     flexDirection: 'row',
