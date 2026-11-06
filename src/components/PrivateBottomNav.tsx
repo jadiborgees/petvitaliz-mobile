@@ -1,9 +1,22 @@
+
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface PrivateBottomNavProps {
-  currentRoute: 'PrivateHome' | 'PrivateExplore' | 'PrivatePlans' | 'PrivateBenefits' | 'PrivateProfile';
+  currentRoute:
+    | 'PrivateHome'
+    | 'PrivateExplore'
+    | 'PrivatePlans'
+    | 'PrivateBenefits'
+    | 'PrivateProfile';
+
   onNavigateToHome?: () => void;
   onNavigateToExplore?: () => void;
   onNavigateToPlans?: () => void;
@@ -26,11 +39,24 @@ function Tab({
   children: React.ReactNode;
 }) {
   return (
-    <TouchableOpacity style={styles.tabItem} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.tabItem}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       <View style={styles.iconSlot}>
-        {active ? <View style={styles.activeCircle}>{children}</View> : children}
+        {active ? (
+          <View style={styles.activeCircle}>
+            {children}
+          </View>
+        ) : (
+          children
+        )}
       </View>
-      <Text style={active ? styles.activeTabText : styles.tabText}>{label}</Text>
+
+      <Text style={active ? styles.activeTabText : styles.tabText}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -38,61 +64,89 @@ function Tab({
 export default function PrivateBottomNav({
   currentRoute,
   onNavigateToHome,
-  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
 }: PrivateBottomNavProps) {
-  const color = (route: PrivateBottomNavProps['currentRoute']) =>
-    currentRoute === route ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR;
+
+  const color = (
+    route: PrivateBottomNavProps['currentRoute']
+  ) =>
+    currentRoute === route
+      ? ACTIVE_ICON_COLOR
+      : INACTIVE_ICON_COLOR;
 
   return (
     <View style={styles.bottomBarWrapper}>
       <View style={styles.bottomBar}>
-        {/* Home */}
-        <Tab active={currentRoute === 'PrivateHome'} label="Home" onPress={onNavigateToHome}>
+
+        {/* Início */}
+        <Tab
+          active={currentRoute === 'PrivateHome'}
+          label="Início"
+          onPress={onNavigateToHome}
+        >
           <Ionicons
-            name={currentRoute === 'PrivateHome' ? 'home' : 'home-outline'}
+            name={
+              currentRoute === 'PrivateHome'
+                ? 'home'
+                : 'home-outline'
+            }
             size={22}
             color={color('PrivateHome')}
           />
         </Tab>
 
-        {/* Explorar */}
-        <Tab active={currentRoute === 'PrivateExplore'} label="Explorar" onPress={onNavigateToExplore}>
-          <Ionicons
-            name={currentRoute === 'PrivateExplore' ? 'search' : 'search-outline'}
-            size={22}
-            color={color('PrivateExplore')}
-          />
-        </Tab>
-
         {/* Plano */}
-        <Tab active={currentRoute === 'PrivatePlans'} label="Plano" onPress={onNavigateToPlans}>
+        <Tab
+          active={currentRoute === 'PrivatePlans'}
+          label="Plano"
+          onPress={onNavigateToPlans}
+        >
           <Image
             source={require('../assets/coroa_outline.png')}
-            style={[styles.crownIcon, { tintColor: color('PrivatePlans') }]}
+            style={[
+              styles.crownIcon,
+              { tintColor: color('PrivatePlans') },
+            ]}
             resizeMode="contain"
           />
         </Tab>
 
         {/* Benefícios */}
-        <Tab active={currentRoute === 'PrivateBenefits'} label="Benefícios" onPress={onNavigateToBenefits}>
+        <Tab
+          active={currentRoute === 'PrivateBenefits'}
+          label="Benefícios"
+          onPress={onNavigateToBenefits}
+        >
           <Ionicons
-            name={currentRoute === 'PrivateBenefits' ? 'gift' : 'gift-outline'}
+            name={
+              currentRoute === 'PrivateBenefits'
+                ? 'gift'
+                : 'gift-outline'
+            }
             size={22}
             color={color('PrivateBenefits')}
           />
         </Tab>
 
         {/* Perfil */}
-        <Tab active={currentRoute === 'PrivateProfile'} label="Perfil" onPress={onNavigateToProfile}>
+        <Tab
+          active={currentRoute === 'PrivateProfile'}
+          label="Perfil"
+          onPress={onNavigateToProfile}
+        >
           <Ionicons
-            name={currentRoute === 'PrivateProfile' ? 'person' : 'person-outline'}
+            name={
+              currentRoute === 'PrivateProfile'
+                ? 'person'
+                : 'person-outline'
+            }
             size={22}
             color={color('PrivateProfile')}
           />
         </Tab>
+
       </View>
     </View>
   );
@@ -107,6 +161,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
+
   bottomBar: {
     flexDirection: 'row',
     height: 65,
@@ -123,12 +178,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
+
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
   },
+
   iconSlot: {
     width: 22,
     height: 22,
@@ -136,6 +193,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
+
   activeCircle: {
     position: 'absolute',
     top: -42,
@@ -154,16 +212,19 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 6,
   },
+
   crownIcon: {
     width: 22,
     height: 22,
   },
+
   tabText: {
     fontSize: 10,
     color: '#64748B',
     marginTop: 4,
     fontWeight: '500',
   },
+
   activeTabText: {
     fontSize: 10,
     color: '#0F172A',

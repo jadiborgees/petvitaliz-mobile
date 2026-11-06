@@ -1,5 +1,12 @@
+
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface BottomNavigationProps {
@@ -14,7 +21,6 @@ interface BottomNavigationProps {
 const ACTIVE_ICON_COLOR = '#FFFFFF';
 const INACTIVE_ICON_COLOR = '#1E293B';
 
-// Wrapper de cada aba: o ícone ativo vira um círculo flutuante
 function Tab({
   active,
   label,
@@ -27,11 +33,24 @@ function Tab({
   children: React.ReactNode;
 }) {
   return (
-    <TouchableOpacity style={styles.tabItem} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.tabItem}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       <View style={styles.iconSlot}>
-        {active ? <View style={styles.activeCircle}>{children}</View> : children}
+        {active ? (
+          <View style={styles.activeCircle}>
+            {children}
+          </View>
+        ) : (
+          children
+        )}
       </View>
-      <Text style={active ? styles.activeTabText : styles.tabText}>{label}</Text>
+
+      <Text style={active ? styles.activeTabText : styles.tabText}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -39,18 +58,27 @@ function Tab({
 export default function BottomNavigation({
   currentRoute,
   onNavigateToHome,
-  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
 }: BottomNavigationProps) {
-  const color = (route: BottomNavigationProps['currentRoute']) =>
-    currentRoute === route ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR;
+
+  const color = (
+    route: BottomNavigationProps['currentRoute']
+  ) =>
+    currentRoute === route
+      ? ACTIVE_ICON_COLOR
+      : INACTIVE_ICON_COLOR;
 
   return (
     <View style={styles.bottomBar}>
-      {/* Home */}
-      <Tab active={currentRoute === 'Home'} label="Home" onPress={onNavigateToHome}>
+
+      {/* INÍCIO */}
+      <Tab
+        active={currentRoute === 'Home'}
+        label="Início"
+        onPress={onNavigateToHome}
+      >
         <Ionicons
           name={currentRoute === 'Home' ? 'home' : 'home-outline'}
           size={22}
@@ -58,26 +86,28 @@ export default function BottomNavigation({
         />
       </Tab>
 
-      {/* Explorar */}
-      <Tab active={currentRoute === 'Explore'} label="Explorar" onPress={onNavigateToExplore}>
-        <Ionicons
-          name={currentRoute === 'Explore' ? 'search' : 'search-outline'}
-          size={22}
-          color={color('Explore')}
-        />
-      </Tab>
-
-      {/* Plano */}
-      <Tab active={currentRoute === 'Plans'} label="Plano" onPress={onNavigateToPlans}>
+      {/* PLANO */}
+      <Tab
+        active={currentRoute === 'Plans'}
+        label="Plano"
+        onPress={onNavigateToPlans}
+      >
         <Image
           source={require('../assets/coroa_outline.png')}
-          style={[styles.crownIcon, { tintColor: color('Plans') }]}
+          style={[
+            styles.crownIcon,
+            { tintColor: color('Plans') },
+          ]}
           resizeMode="contain"
         />
       </Tab>
 
-      {/* Benefícios */}
-      <Tab active={currentRoute === 'Benefits'} label="Benefícios" onPress={onNavigateToBenefits}>
+      {/* BENEFÍCIOS */}
+      <Tab
+        active={currentRoute === 'Benefits'}
+        label="Benefícios"
+        onPress={onNavigateToBenefits}
+      >
         <Ionicons
           name={currentRoute === 'Benefits' ? 'gift' : 'gift-outline'}
           size={22}
@@ -85,14 +115,19 @@ export default function BottomNavigation({
         />
       </Tab>
 
-      {/* Perfil */}
-      <Tab active={currentRoute === 'Profile'} label="Perfil" onPress={onNavigateToProfile}>
+      {/* PERFIL */}
+      <Tab
+        active={currentRoute === 'Profile'}
+        label="Perfil"
+        onPress={onNavigateToProfile}
+      >
         <Ionicons
           name={currentRoute === 'Profile' ? 'person' : 'person-outline'}
           size={22}
           color={color('Profile')}
         />
       </Tab>
+
     </View>
   );
 }
@@ -114,13 +149,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
+
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
   },
-  // Espaço fixo do ícone: mantém todos os textos alinhados na mesma altura
+
   iconSlot: {
     width: 22,
     height: 22,
@@ -128,7 +164,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
-  // Círculo azul com borda branca, flutuando acima da barra
+
   activeCircle: {
     position: 'absolute',
     top: -42,
@@ -147,16 +183,19 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 6,
   },
+
   crownIcon: {
     width: 22,
     height: 22,
   },
+
   tabText: {
     fontSize: 10,
     color: '#64748B',
     marginTop: 4,
     fontWeight: '500',
   },
+
   activeTabText: {
     fontSize: 10,
     color: '#0F172A',

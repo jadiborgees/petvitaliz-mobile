@@ -1,5 +1,11 @@
+
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, BackHandler } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  BackHandler,
+  Alert,
+} from 'react-native';
 
 // Telas públicas
 import SplashScreen from '../screens/public/SplashScreen';
@@ -27,6 +33,9 @@ import PrivateProfileScreen from '../screens/private/PrivateProfileScreen';
 import PrivateExploreScreen from '../screens/private/PrivateExploreScreen';
 import PrivateServicesScreen from '../screens/private/PrivateServicesScreen';
 import PrivatePlansScreen from '../screens/private/PrivatePlansScreen';
+import PrivateMyPlanScreen from '../screens/private/PrivateMyPlanScreen';
+import PrivateManagePlanScreen from '../screens/private/PrivateManagePlanScreen';
+import PrivateInvoicesScreen from '../screens/private/PrivateInvoicesScreen';
 import PrivateBenefitsScreen from '../screens/private/PrivateBenefitsScreen';
 import PrivatePersonalDataScreen from '../screens/private/PrivatePersonalDataScreen';
 import PrivatePaymentMethodsScreen from '../screens/private/PrivatePaymentMethodsScreen';
@@ -36,6 +45,7 @@ import PrivateNotificationsScreen from '../screens/private/PrivateNotificationsS
 import PrivateSecurityScreen from '../screens/private/PrivateSecurityScreen';
 import PrivateHelpSupportScreen from '../screens/private/PrivateHelpSupportScreen';
 
+// Rotas
 type Screen =
   | 'Splash'
   | 'Home'
@@ -60,6 +70,9 @@ type Screen =
   | 'PrivateExplore'
   | 'PrivateServices'
   | 'PrivatePlans'
+  | 'PrivateMyPlan'
+  | 'PrivateManagePlan'
+  | 'PrivateInvoices'
   | 'PrivateBenefits'
   | 'PrivatePersonalData'
   | 'PrivatePaymentMethods'
@@ -69,53 +82,94 @@ type Screen =
   | 'PrivateSecurity'
   | 'PrivateHelpSupport';
 
+// Dados da assinatura
+type PlanSubscription = {
+  planId: string;
+  planName: string;
+  petName: string;
+  billingCycle: 'monthly' | 'yearly';
+  paymentMethod: 'card' | 'pix' | 'boleto';
+  totalPrice: number;
+  installments: number;
+  status: 'paid' | 'pending';
+};
+
+// Dados das faturas
+type Invoice = {
+  id: string;
+  description: string;
+  dueDate: string;
+  amount: number;
+  status: 'Paga' | 'Pendente';
+};
+
 export default function AppNavigator() {
   const [stack, setStack] = useState<Screen[]>(['Splash']);
+
   const [registeredEmails, setRegisteredEmails] = useState<string[]>([]);
   const [recoveryEmail, setRecoveryEmail] = useState('');
 
-  // Estados globais do utilizador (Perfil, Dados Pessoais, Foto, etc.)
+  // Dados do usuário
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userName, setUserName] = useState('Jadi Borges');
   const [userEmail, setUserEmail] = useState('jadi.borges@email.com');
   const [userPhone, setUserPhone] = useState('(11) 98765-4321');
   const [userCpf, setUserCpf] = useState('123.456.789-00');
 
+  // Dados da contratação
+  const [planSubscription, setPlanSubscription] =
+    useState<PlanSubscription | null>(null);
+
+  // Faturas: serão preenchidas quando conectarmos os dados de cobrança
+  const [invoices] = useState<Invoice[]>([]);
+
   const currentScreen = stack[stack.length - 1];
 
-  const push = useCallback(
-    (screen: Screen) => setStack((prev) => [...prev, screen]),
-    []
-  );
+  // Navegação
+  const push = useCallback((screen: Screen) => {
+    setStack((prev) => [...prev, screen]);
+  }, []);
 
-  const reset = useCallback((screen: Screen) => setStack([screen]), []);
+  const reset = useCallback((screen: Screen) => {
+    setStack([screen]);
+  }, []);
 
-  const back = useCallback(
-    () => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev)),
-    []
-  );
+  const back = useCallback(() => {
+    setStack((prev) =>
+      prev.length > 1 ? prev.slice(0, -1) : prev
+    );
+  }, []);
 
   const goTo = useCallback((target: 'Login' | 'Register') => {
     setStack((prev) => {
       const index = prev.lastIndexOf(target);
-      if (index >= 0) return prev.slice(0, index + 1);
+
+      if (index >= 0) {
+        return prev.slice(0, index + 1);
+      }
+
       return [...prev.slice(0, -1), target];
     });
   }, []);
 
   // Botão voltar do Android
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (stack.length > 1) {
-        back();
-        return true;
+    const sub = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (stack.length > 1) {
+          back();
+          return true;
+        }
+
+        return false;
       }
-      return false;
-    });
+    );
+
     return () => sub.remove();
   }, [stack, back]);
 
-  // Navegação das abas inferiores (públicas)
+  // Navegação pública
   const tabs = {
     onNavigateToHome: () => reset('Home'),
     onNavigateToExplore: () => reset('Explore'),
@@ -124,21 +178,32 @@ export default function AppNavigator() {
     onNavigateToProfile: () => reset('Profile'),
   };
 
-  // Navegação da barra inferior (privada / pós-login)
+  // Navegação privada
   const privateTabs = {
     onNavigateToHome: () => reset('PrivateHome'),
     onNavigateToExplore: () => reset('PrivateExplore'),
-    onNavigateToPlans: () => reset('PrivatePlans'),
+
+    // A coroa abre Meu Plano quando existe uma assinatura.
+    // Caso contrário, abre a vitrine de planos.
+    onNavigateToPlans: () =>
+      reset(planSubscription ? 'PrivateMyPlan' : 'PrivatePlans'),
+
+    onNavigateToMyPlan: () => reset('PrivateMyPlan'),
     onNavigateToBenefits: () => reset('PrivateBenefits'),
     onNavigateToProfile: () => reset('PrivateProfile'),
   };
 
   const renderScreen = () => {
     switch (currentScreen) {
+      // Splash
       case 'Splash':
-        return <SplashScreen onFinish={() => reset('Home')} />;
+        return (
+          <SplashScreen
+            onFinish={() => reset('Home')}
+          />
+        );
 
-      // ---------- Abas principais (Públicas) ----------
+      // Telas públicas
       case 'Home':
         return (
           <HomeScreen
@@ -149,8 +214,15 @@ export default function AppNavigator() {
             onNavigateToHowItWorks={() => push('HowItWorks')}
           />
         );
+
       case 'Explore':
-        return <ExploreScreen {...tabs} onBack={() => reset('Home')} />;
+        return (
+          <ExploreScreen
+            {...tabs}
+            onBack={() => reset('Home')}
+          />
+        );
+
       case 'Plans':
         return (
           <PlansScreen
@@ -159,6 +231,7 @@ export default function AppNavigator() {
             onBack={() => reset('Home')}
           />
         );
+
       case 'Benefits':
         return (
           <BenefitsScreen
@@ -168,6 +241,7 @@ export default function AppNavigator() {
             onBack={() => reset('Home')}
           />
         );
+
       case 'Profile':
         return (
           <ProfileScreen
@@ -182,7 +256,7 @@ export default function AppNavigator() {
           />
         );
 
-      // ---------- Páginas de conteúdo (Públicas) ----------
+      // Páginas públicas
       case 'Services':
         return (
           <ServicesScreen
@@ -192,6 +266,7 @@ export default function AppNavigator() {
             onNavigateToLogin={() => push('Login')}
           />
         );
+
       case 'HowItWorks':
         return (
           <HowItWorksScreen
@@ -201,16 +276,20 @@ export default function AppNavigator() {
             onNavigateToRegister={() => push('Register')}
           />
         );
+
       case 'Support':
         return <SupportScreen {...tabs} onBack={back} />;
+
       case 'Faq':
         return <FaqScreen {...tabs} onBack={back} />;
+
       case 'Terms':
         return <TermsScreen {...tabs} onBack={back} />;
+
       case 'Privacy':
         return <PrivacyScreen {...tabs} onBack={back} />;
 
-      // ---------- Autenticação ----------
+      // Autenticação
       case 'Login':
         return (
           <LoginScreen
@@ -222,6 +301,7 @@ export default function AppNavigator() {
             onNavigateToPrivacy={() => push('Privacy')}
           />
         );
+
       case 'Register':
         return (
           <RegisterScreen
@@ -236,7 +316,7 @@ export default function AppNavigator() {
           />
         );
 
-      // ---------- Recuperação de senha ----------
+      // Recuperação de senha
       case 'ForgotPassword':
         return (
           <ForgotPasswordScreen
@@ -249,6 +329,7 @@ export default function AppNavigator() {
             }}
           />
         );
+
       case 'EmailSent':
         return (
           <EmailSentScreen
@@ -257,6 +338,7 @@ export default function AppNavigator() {
             onNavigateToVerifyCode={() => push('VerifyCode')}
           />
         );
+
       case 'VerifyCode':
         return (
           <VerifyCodeScreen
@@ -264,6 +346,7 @@ export default function AppNavigator() {
             onNavigateToResetPassword={() => push('ResetPassword')}
           />
         );
+
       case 'ResetPassword':
         return (
           <ResetPasswordScreen
@@ -272,7 +355,7 @@ export default function AppNavigator() {
           />
         );
 
-      // ---------- Área Privada (Pós-login) ----------
+      // Área privada
       case 'PrivateHome':
         return (
           <PrivateHomeScreen
@@ -282,6 +365,7 @@ export default function AppNavigator() {
             userName={userName}
           />
         );
+
       case 'PrivateProfile':
         return (
           <PrivateProfileScreen
@@ -299,16 +383,98 @@ export default function AppNavigator() {
             onLogout={() => reset('Home')}
           />
         );
-      case 'PrivateExplore':
-        return <PrivateExploreScreen {...privateTabs} />;
-      case 'PrivateServices':
-        return <PrivateServicesScreen {...privateTabs} onBack={back} />;
-      case 'PrivatePlans':
-        return <PrivatePlansScreen {...privateTabs} />;
-      case 'PrivateBenefits':
-        return <PrivateBenefitsScreen {...privateTabs} />;
 
-      // ---------- Subtelas do Perfil Privado ----------
+      case 'PrivateExplore':
+        return (
+          <PrivateExploreScreen {...privateTabs} />
+        );
+
+      case 'PrivateServices':
+        return (
+          <PrivateServicesScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
+      // Contratação de planos
+      case 'PrivatePlans':
+        return (
+          <PrivatePlansScreen
+            {...privateTabs}
+            onPurchaseComplete={setPlanSubscription}
+            onNavigateToAddPet={() => push('PrivatePetsFlow')}
+            onNavigateToMyPlan={() => reset('PrivateMyPlan')}
+          />
+        );
+
+      // Meu Plano
+      case 'PrivateMyPlan':
+        return (
+          <PrivateMyPlanScreen
+            {...privateTabs}
+            onBack={back}
+            onNavigateToPlans={() => reset('PrivatePlans')}
+            onNavigateToManagePlan={() => push('PrivateManagePlan')}
+            onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
+            onNavigateToInvoices={() => push('PrivateInvoices')}
+            subscription={planSubscription}
+            invoices={invoices}
+          />
+        );
+
+      // Gerenciar Plano
+      case 'PrivateManagePlan':
+        return (
+          <PrivateManagePlanScreen
+            {...privateTabs}
+            onBack={back}
+            onNavigateToPlans={() => reset('PrivatePlans')}
+            onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
+            subscription={planSubscription}
+            onChangeBillingCycle={(cycle) => {
+              Alert.alert(
+                'Alteração de cobrança',
+                `O ciclo selecionado foi ${cycle === 'yearly' ? 'anual' : 'mensal'}. A confirmação da alteração deverá ser feita no fluxo de pagamento.`
+              );
+            }}
+            onCancelSubscription={() => {
+              Alert.alert(
+                'Cancelamento',
+                'A solicitação de cancelamento ainda precisa ser conectada ao backend.'
+              );
+            }}
+          />
+        );
+
+      // Faturas
+      case 'PrivateInvoices':
+        return (
+          <PrivateInvoicesScreen
+            {...privateTabs}
+            onBack={back}
+            invoices={invoices}
+            onPayInvoice={(invoice) => {
+              Alert.alert(
+                'Pagamento de fatura',
+                `Fatura: ${invoice.description}\nValor: ${invoice.amount.toLocaleString(
+                  'pt-BR',
+                  {
+                    style: 'currency',
+                    currency: 'BRL',
+                  }
+                )}\n\nO pagamento desta fatura ainda precisa ser conectado ao checkout.`
+              );
+            }}
+          />
+        );
+
+      case 'PrivateBenefits':
+        return (
+          <PrivateBenefitsScreen {...privateTabs} />
+        );
+
+      // Subtelas do perfil privado
       case 'PrivatePersonalData':
         return (
           <PrivatePersonalDataScreen
@@ -326,25 +492,65 @@ export default function AppNavigator() {
             setUserCpf={setUserCpf}
           />
         );
+
       case 'PrivatePaymentMethods':
-        return <PrivatePaymentMethodsScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivatePaymentMethodsScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
       case 'PrivatePetsFlow':
-        return <PrivatePetsFlowScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivatePetsFlowScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
       case 'PrivateConsultations':
-        return <PrivateConsultationsScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivateConsultationsScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
       case 'PrivateNotifications':
-        return <PrivateNotificationsScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivateNotificationsScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
       case 'PrivateSecurity':
-        return <PrivateSecurityScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivateSecurityScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
+
       case 'PrivateHelpSupport':
-        return <PrivateHelpSupportScreen {...privateTabs} onBack={back} />;
+        return (
+          <PrivateHelpSupportScreen
+            {...privateTabs}
+            onBack={back}
+          />
+        );
 
       default:
         return null;
     }
   };
 
-  return <View style={styles.container}>{renderScreen()}</View>;
+  return (
+    <View style={styles.container}>
+      {renderScreen()}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
