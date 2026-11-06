@@ -1,5 +1,4 @@
-
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,21 +16,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import type { Pet } from './PrivatePetsFlowScreen';
 
 type Step = 'showcase' | 'details' | 'payment' | 'loading' | 'success';
 type BillingCycle = 'monthly' | 'yearly';
 type PaymentMethod = 'card' | 'pix' | 'boleto';
 type PaymentStatus = 'paid' | 'pending';
-
-interface Pet {
-  id: string;
-  name: string;
-  type: string;
-  breed: string;
-  age: string;
-  gender: string;
-  avatar: any;
-}
 
 interface Plan {
   id: string;
@@ -43,6 +33,7 @@ interface Plan {
 }
 
 interface SubscriptionData {
+  petId: string;
   planId: string;
   planName: string;
   petName: string;
@@ -62,6 +53,7 @@ interface Props {
   onNavigateToBenefits?: () => void;
   onNavigateToProfile?: () => void;
   onNavigateToAddPet?: () => void;
+  pets: Pet[];
   onPurchaseComplete?: (data: SubscriptionData) => void;
 }
 
@@ -130,6 +122,7 @@ const plansData: Record<BillingCycle, Plan[]> = {
       ],
     },
   ],
+
   yearly: [
     {
       id: 'bronze',
@@ -209,12 +202,17 @@ export default function PrivatePlansScreen({
   onNavigateToBenefits,
   onNavigateToProfile,
   onNavigateToAddPet,
+  pets,
   onPurchaseComplete,
 }: Props) {
   const [step, setStep] = useState<Step>('showcase');
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [billingCycle, setBillingCycle] =
+    useState<BillingCycle>('monthly');
+
   const [selectedPlanId, setSelectedPlanId] = useState('ouro');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>('card');
+
   const [installments, setInstallments] = useState(1);
   const [installmentsOpen, setInstallmentsOpen] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(true);
@@ -228,22 +226,30 @@ export default function PrivatePlansScreen({
   const [paymentStatus, setPaymentStatus] =
     useState<PaymentStatus>('pending');
 
-  // Dados demonstrativos. Substituir pelos pets retornados pela API.
-  const [userPets] = useState<Pet[]>([
-    {
-      id: '1',
-      name: 'Lua',
-      type: 'Cachorro',
-      breed: 'Golden Retriever',
-      age: '4 anos',
-      gender: 'Fêmea',
-      avatar: require('../../assets/Explorar2.png'),
-    },
-  ]);
+  const userPets = pets;
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(
-    userPets.length === 1 ? userPets[0].id : null
+    pets.length > 0 ? pets[0].id : null
   );
+
+  const [petListExpanded, setPetListExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!selectedPetId && pets.length > 0) {
+      setSelectedPetId(pets[0].id);
+    }
+
+    if (
+      selectedPetId &&
+      !pets.some((pet) => pet.id === selectedPetId)
+    ) {
+      setSelectedPetId(pets.length > 0 ? pets[0].id : null);
+    }
+
+    if (pets.length <= 1) {
+      setPetListExpanded(false);
+    }
+  }, [pets, selectedPetId]);
 
   const currentPlans = plansData[billingCycle];
 
@@ -254,6 +260,47 @@ export default function PrivatePlansScreen({
   const selectedPet = userPets.find(
     (pet) => pet.id === selectedPetId
   );
+
+  // Foto real somente quando existir uma imagem cadastrada.
+  // Sem foto, mostra exclusivamente o ícone de patinha.
+  const renderPetAvatar = (
+    avatar: string | null,
+    checkout = false
+  ) => {
+    const avatarStyle = checkout
+      ? styles.checkoutPetAvatar
+      : styles.petAvatar;
+
+    const photoUri =
+      typeof avatar === 'string' ? avatar.trim() : '';
+
+    const isUserPhoto =
+      photoUri.startsWith('https://') ||
+      photoUri.startsWith('http://') ||
+      photoUri.startsWith('file://') ||
+      photoUri.startsWith('content://') ||
+      photoUri.startsWith('data:image/');
+
+    if (isUserPhoto) {
+      return (
+        <Image
+          source={{ uri: photoUri }}
+          style={avatarStyle}
+          resizeMode="cover"
+        />
+      );
+    }
+
+    return (
+      <View style={[avatarStyle, styles.petAvatarPlaceholder]}>
+        <Ionicons
+          name="paw"
+          size={checkout ? 27 : 25}
+          color="#21479B"
+        />
+      </View>
+    );
+  };
 
   const totalPrice = useMemo(
     () =>
@@ -308,19 +355,28 @@ export default function PrivatePlansScreen({
         'Cadastre um pet antes de contratar um plano.',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Cadastrar pet', onPress: onNavigateToAddPet },
+          {
+            text: 'Cadastrar pet',
+            onPress: onNavigateToAddPet,
+          },
         ]
       );
       return;
     }
 
     if (!selectedPet) {
-      Alert.alert('Selecione um pet', 'Escolha o pet que receberá o plano.');
+      Alert.alert(
+        'Selecione um pet',
+        'Escolha o pet que receberá o plano.'
+      );
       return;
     }
 
     if (!acceptedTerms) {
-      Alert.alert('Termos de uso', 'Aceite os termos para continuar.');
+      Alert.alert(
+        'Termos de uso',
+        'Aceite os termos para continuar.'
+      );
       return;
     }
 
@@ -339,25 +395,29 @@ export default function PrivatePlansScreen({
       return;
     }
 
-    if (paymentMethod === 'card') {
-      if (
-        !cardNumber.trim() ||
+    if (
+      paymentMethod === 'card' &&
+      (!cardNumber.trim() ||
         !cardName.trim() ||
         !cardExpiry.trim() ||
-        !cardCvv.trim()
-      ) {
-        Alert.alert('Dados incompletos', 'Preencha todos os dados do cartão.');
-        return;
-      }
-
-      // Simulação: a aprovação real depende da integração com o gateway.
-      setPaymentStatus('paid');
-    } else {
-      // Pix e boleto permanecem pendentes até a confirmação do gateway.
-      setPaymentStatus('pending');
+        !cardCvv.trim())
+    ) {
+      Alert.alert(
+        'Dados incompletos',
+        'Preencha todos os dados do cartão.'
+      );
+      return;
     }
 
+    // Cartão: aprovação simulada neste protótipo.
+    // Pix e boleto ficam pendentes até a confirmação do gateway.
+    const nextStatus: PaymentStatus =
+      paymentMethod === 'card' ? 'paid' : 'pending';
+
+    setPaymentStatus(nextStatus);
+
     const subscription: SubscriptionData = {
+      petId: selectedPet.id,
       planId: activePlanObj.id,
       planName: activePlanObj.title,
       petName: selectedPet.name,
@@ -365,27 +425,17 @@ export default function PrivatePlansScreen({
       paymentMethod,
       totalPrice: finalPaymentTotal,
       installments:
-        billingCycle === 'yearly' && paymentMethod === 'card'
+        paymentMethod === 'card' && billingCycle === 'yearly'
           ? installments
           : 1,
-      status: paymentMethod === 'card' ? 'paid' : 'pending',
+      status: nextStatus,
     };
 
     onPurchaseComplete?.(subscription);
-
-    if (paymentMethod === 'pix' || paymentMethod === 'boleto') {
-      setStep('loading');
-
-      setTimeout(() => {
-        onNavigateToMyPlan?.();
-      }, 10000);
-
-      return;
-    }
-
     setStep('success');
   };
 
+  // Seleção de pet em formato expansível.
   const renderPetSelection = () => {
     if (userPets.length === 0) {
       return (
@@ -394,115 +444,126 @@ export default function PrivatePlansScreen({
           onPress={onNavigateToAddPet}
           activeOpacity={0.85}
         >
-          <Ionicons name="add-circle-outline" size={28} color="#21479B" />
+          <Ionicons
+            name="add-circle-outline"
+            size={28}
+            color="#21479B"
+          />
+
           <View style={styles.petInfo}>
-            <Text style={styles.petName}>Nenhum pet cadastrado</Text>
+            <Text style={styles.petName}>
+              Nenhum pet cadastrado
+            </Text>
+
             <Text style={styles.petBreed}>
               Cadastre um pet para contratar um plano.
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color="#94A3B8"
+          />
         </TouchableOpacity>
       );
     }
 
+    if (!selectedPet) {
+      return null;
+    }
+
     return (
       <View>
-        {userPets.length > 1 && (
-          <Text style={styles.petSelectionDescription}>
-            Selecione o pet que receberá o plano.
-          </Text>
+        <TouchableOpacity
+          style={styles.petDropdownHeader}
+          onPress={() => {
+            if (userPets.length > 1) {
+              setPetListExpanded((expanded) => !expanded);
+            }
+          }}
+          activeOpacity={userPets.length > 1 ? 0.8 : 1}
+        >
+          <View style={styles.petDropdownSelected}>
+            {renderPetAvatar(selectedPet.avatar)}
+
+            <View style={styles.petInfo}>
+              <Text style={styles.petName}>
+                {selectedPet.name}
+              </Text>
+
+              <Text style={styles.petBreed}>
+                {selectedPet.species} · {selectedPet.breed}
+              </Text>
+
+              <Text style={styles.petAge}>
+                {selectedPet.age} · {selectedPet.gender}
+              </Text>
+            </View>
+          </View>
+
+          {userPets.length > 1 && (
+            <Ionicons
+              name={
+                petListExpanded
+                  ? 'chevron-up'
+                  : 'chevron-down'
+              }
+              size={23}
+              color="#21479B"
+            />
+          )}
+        </TouchableOpacity>
+
+        {userPets.length > 1 && petListExpanded && (
+          <View style={styles.petDropdownOptions}>
+            {userPets
+              .filter((pet) => pet.id !== selectedPetId)
+              .map((pet) => (
+                <TouchableOpacity
+                  key={pet.id}
+                  style={styles.petCard}
+                  onPress={() => {
+                    setSelectedPetId(pet.id);
+                    setPetListExpanded(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  {renderPetAvatar(pet.avatar)}
+
+                  <View style={styles.petInfo}>
+                    <Text style={styles.petName}>
+                      {pet.name}
+                    </Text>
+
+                    <Text style={styles.petBreed}>
+                      {pet.species} · {pet.breed}
+                    </Text>
+
+                    <Text style={styles.petAge}>
+                      {pet.age} · {pet.gender}
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="radio-button-off"
+                    size={22}
+                    color="#94A3B8"
+                  />
+                </TouchableOpacity>
+              ))}
+          </View>
         )}
-
-        {userPets.map((pet) => {
-          const selected = selectedPetId === pet.id;
-
-          return (
-            <TouchableOpacity
-              key={pet.id}
-              style={[styles.petCard, selected && styles.selectedPetCard]}
-              onPress={() => setSelectedPetId(pet.id)}
-              activeOpacity={0.85}
-            >
-              <Image source={pet.avatar} style={styles.petAvatar} />
-              <View style={styles.petInfo}>
-                <Text style={styles.petName}>{pet.name}</Text>
-                <Text style={styles.petBreed}>
-                  {pet.type} · {pet.breed}
-                </Text>
-                <Text style={styles.petAge}>
-                  {pet.age} · {pet.gender}
-                </Text>
-              </View>
-              <Ionicons
-                name={selected ? 'radio-button-on' : 'radio-button-off'}
-                size={22}
-                color={selected ? '#21479B' : '#94A3B8'}
-              />
-            </TouchableOpacity>
-          );
-        })}
       </View>
-    );
-  };
-
-  const renderPaymentMethod = (
-    method: PaymentMethod,
-    title: string,
-    subtitle: string,
-    icon: keyof typeof Ionicons.glyphMap
-  ) => {
-    const selected = paymentMethod === method;
-
-    return (
-      <TouchableOpacity
-        key={method}
-        style={[
-          styles.paymentMethodCard,
-          selected && styles.activePaymentCard,
-        ]}
-        onPress={() => {
-          setPaymentMethod(method);
-          setInstallments(1);
-          setInstallmentsOpen(false);
-        }}
-        activeOpacity={0.85}
-      >
-        <Ionicons
-          name={icon}
-          size={24}
-          color={selected ? '#FFFFFF' : '#21479B'}
-        />
-        <View style={styles.paymentMethodInfo}>
-          <Text
-            style={[
-              styles.paymentMethodText,
-              selected && styles.paymentMethodTextActive,
-            ]}
-          >
-            {title}
-          </Text>
-          <Text
-            style={[
-              styles.paymentMethodSubtitle,
-              selected && styles.paymentMethodSubtitleActive,
-            ]}
-          >
-            {subtitle}
-          </Text>
-        </View>
-        <Ionicons
-          name={selected ? 'radio-button-on' : 'radio-button-off'}
-          size={21}
-          color={selected ? '#FFFFFF' : '#94A3B8'}
-        />
-      </TouchableOpacity>
     );
   };
 
   const renderInstallments = () => (
     <>
-      <Text style={styles.sectionLabel}>QUANTIDADE DE PARCELAS</Text>
+      <Text style={styles.sectionLabel}>
+        QUANTIDADE DE PARCELAS
+      </Text>
+
       <View style={styles.installmentsContainer}>
         <Text style={styles.installmentsDescription}>
           Escolha em quantas vezes deseja pagar o plano anual.
@@ -510,21 +571,27 @@ export default function PrivatePlansScreen({
 
         <TouchableOpacity
           style={styles.installmentDropdown}
-          onPress={() => setInstallmentsOpen((value) => !value)}
+          onPress={() =>
+            setInstallmentsOpen((value) => !value)
+          }
           activeOpacity={0.85}
         >
           <View>
             <Text style={styles.installmentDropdownTitle}>
               {installments}x de {formattedInstallment}
             </Text>
+
             <Text style={styles.installmentDropdownSubtitle}>
               {installments <= 4
                 ? 'Sem juros'
                 : 'Com juros de 1,99% ao mês'}
             </Text>
           </View>
+
           <Ionicons
-            name={installmentsOpen ? 'chevron-up' : 'chevron-down'}
+            name={
+              installmentsOpen ? 'chevron-up' : 'chevron-down'
+            }
             size={21}
             color="#21479B"
           />
@@ -535,11 +602,13 @@ export default function PrivatePlansScreen({
             {Array.from({ length: 12 }, (_, index) => index + 1).map(
               (number) => {
                 const rate = number > 4 ? INTEREST_RATE : 0;
+
                 const value =
                   rate === 0
                     ? totalPrice / number
                     : totalPrice *
-                      (rate / (1 - Math.pow(1 + rate, -number)));
+                      (rate /
+                        (1 - Math.pow(1 + rate, -number)));
 
                 const selected = installments === number;
 
@@ -548,7 +617,8 @@ export default function PrivatePlansScreen({
                     key={number}
                     style={[
                       styles.installmentDropdownOption,
-                      selected && styles.installmentDropdownOptionActive,
+                      selected &&
+                        styles.installmentDropdownOptionActive,
                     ]}
                     onPress={() => {
                       setInstallments(number);
@@ -559,20 +629,24 @@ export default function PrivatePlansScreen({
                       <Text
                         style={[
                           styles.installmentNumber,
-                          selected && styles.installmentNumberActive,
+                          selected &&
+                            styles.installmentNumberActive,
                         ]}
                       >
                         {number}x de {formatCurrency(value)}
                       </Text>
+
                       <Text
                         style={[
                           styles.installmentOptionSubtitle,
-                          selected && styles.installmentNumberActive,
+                          selected &&
+                            styles.installmentNumberActive,
                         ]}
                       >
                         {number <= 4 ? 'Sem juros' : 'Com juros'}
                       </Text>
                     </View>
+
                     {selected && (
                       <Ionicons
                         name="checkmark-circle"
@@ -591,6 +665,7 @@ export default function PrivatePlansScreen({
           <Text style={styles.installmentResultLabel}>
             {installments}x de
           </Text>
+
           <Text style={styles.installmentResultValue}>
             {formattedInstallment}
           </Text>
@@ -601,6 +676,7 @@ export default function PrivatePlansScreen({
             <Text style={styles.interestText}>
               Juros: {formatCurrency(interestAmount)}
             </Text>
+
             <Text style={styles.interestText}>
               Total com juros: {formatCurrency(installmentTotal)}
             </Text>
@@ -613,15 +689,24 @@ export default function PrivatePlansScreen({
       </View>
     </>
   );
-
-  return (
+    return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#FFFFFF"
+      />
 
       <View style={styles.header}>
         {step !== 'success' ? (
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <Ionicons name="chevron-back" size={24} color="#21479B" />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBack}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color="#21479B"
+            />
           </TouchableOpacity>
         ) : (
           <View style={styles.backButton} />
@@ -634,6 +719,7 @@ export default function PrivatePlansScreen({
           {step === 'loading' && 'Preparando contratação'}
           {step === 'success' && 'Pagamento concluído'}
         </Text>
+
         <View style={styles.backButton} />
       </View>
 
@@ -648,31 +734,38 @@ export default function PrivatePlansScreen({
         {step === 'showcase' && (
           <>
             <View style={styles.tabContainer}>
-              {(['monthly', 'yearly'] as BillingCycle[]).map((cycle) => (
-                <TouchableOpacity
-                  key={cycle}
-                  style={[
-                    styles.tabButton,
-                    billingCycle === cycle && styles.tabButtonActive,
-                  ]}
-                  onPress={() => changeBillingCycle(cycle)}
-                >
-                  <Text
+              {(['monthly', 'yearly'] as BillingCycle[]).map(
+                (cycle) => (
+                  <TouchableOpacity
+                    key={cycle}
                     style={[
-                      styles.tabText,
-                      billingCycle === cycle && styles.tabTextActive,
+                      styles.tabButton,
+                      billingCycle === cycle &&
+                        styles.tabButtonActive,
                     ]}
+                    onPress={() => changeBillingCycle(cycle)}
                   >
-                    {cycle === 'monthly' ? 'Mensal' : 'Anual · 10% OFF'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.tabText,
+                        billingCycle === cycle &&
+                          styles.tabTextActive,
+                      ]}
+                    >
+                      {cycle === 'monthly'
+                        ? 'Mensal'
+                        : 'Anual · 10% OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              )}
             </View>
 
             <View style={styles.cardsList}>
               {currentPlans.map((plan) => {
                 const selected = selectedPlanId === plan.id;
                 const recommended = plan.id === 'ouro';
+
                 const features = selected
                   ? [...plan.features, ...plan.extraFeatures]
                   : plan.features;
@@ -686,10 +779,18 @@ export default function PrivatePlansScreen({
                     ]}
                   >
                     <View style={styles.cardTopRow}>
-                      <Text style={styles.cardTag}>{plan.tag}</Text>
+                      <Text style={styles.cardTag}>
+                        {plan.tag}
+                      </Text>
+
                       {recommended && (
                         <View style={styles.recommendedBadge}>
-                          <Ionicons name="star" size={11} color="#315BA8" />
+                          <Ionicons
+                            name="star"
+                            size={11}
+                            color="#315BA8"
+                          />
+
                           <Text style={styles.recommendedText}>
                             RECOMENDADO
                           </Text>
@@ -698,26 +799,37 @@ export default function PrivatePlansScreen({
                     </View>
 
                     <View style={styles.cardHeaderRow}>
-                      <Text style={styles.cardTitle}>{plan.title}</Text>
+                      <Text style={styles.cardTitle}>
+                        {plan.title}
+                      </Text>
+
                       <View style={styles.priceContainer}>
                         <Text style={styles.cardPrice}>
                           {formatCurrency(plan.price)}
                         </Text>
-                        <Text style={styles.cardPeriod}>/mês</Text>
+
+                        <Text style={styles.cardPeriod}>
+                          /mês
+                        </Text>
                       </View>
                     </View>
 
                     <View style={styles.featuresList}>
                       {features.map((feature, index) => (
-                        <View key={index} style={styles.featureItem}>
+                        <View
+                          key={index}
+                          style={styles.featureItem}
+                        >
                           <Ionicons
                             name="checkmark-circle"
                             size={16}
                             color="#10B981"
                           />
+
                           <Text style={styles.featureText}>
                             {feature.text}
                           </Text>
+
                           <Text style={styles.featureCount}>
                             {feature.count}
                           </Text>
@@ -747,107 +859,161 @@ export default function PrivatePlansScreen({
         {/* DETALHES DO PLANO */}
         {step === 'details' && (
           <>
-            <Text style={styles.sectionLabel}>PET VINCULADO</Text>
+            <Text style={styles.sectionLabel}>
+              PET VINCULADO
+            </Text>
+
+            <Text style={styles.petSelectionDescription}>
+              Selecione o pet que receberá o plano.
+            </Text>
+
             {renderPetSelection()}
 
-            <Text style={styles.sectionLabel}>O QUE ESTÁ INCLUSO</Text>
+            <Text style={styles.sectionLabel}>
+              O QUE ESTÁ INCLUSO
+            </Text>
+
             <View style={styles.detailsBox}>
-              {[...activePlanObj.features, ...activePlanObj.extraFeatures].map(
-                (item, index) => (
-                  <View key={index} style={styles.detailRow}>
-                    <View style={styles.detailRowLeft}>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={16}
-                        color="#10B981"
-                      />
-                      <Text style={styles.detailRowText}>{item.text}</Text>
-                    </View>
-                    <Text style={styles.detailRowMetric}>{item.count}</Text>
+              {[
+                ...activePlanObj.features,
+                ...activePlanObj.extraFeatures,
+              ].map((item, index) => (
+                <View
+                  key={index}
+                  style={styles.detailRow}
+                >
+                  <View style={styles.detailRowLeft}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={16}
+                      color="#10B981"
+                    />
+
+                    <Text style={styles.detailRowText}>
+                      {item.text}
+                    </Text>
                   </View>
-                )
-              )}
+
+                  <Text style={styles.detailRowMetric}>
+                    {item.count}
+                  </Text>
+                </View>
+              ))}
             </View>
 
-            <Text style={styles.sectionLabel}>CICLO DE COBRANÇA</Text>
-            <View style={styles.cycleRow}>
-              {(['monthly', 'yearly'] as BillingCycle[]).map((cycle) => {
-                const plan = plansData[cycle].find(
-                  (item) => item.id === selectedPlanId
-                )!;
+            <Text style={styles.sectionLabel}>
+              CICLO DE COBRANÇA
+            </Text>
 
-                return (
-                  <TouchableOpacity
-                    key={cycle}
-                    style={[
-                      styles.cycleBox,
-                      billingCycle === cycle && styles.activeCycleBox,
-                    ]}
-                    onPress={() => changeBillingCycle(cycle)}
-                  >
-                    <View style={styles.cycleBoxHeader}>
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color="#21479B"
-                      />
-                      {billingCycle === cycle && (
+            <View style={styles.cycleRow}>
+              {(['monthly', 'yearly'] as BillingCycle[]).map(
+                (cycle) => {
+                  const plan = plansData[cycle].find(
+                    (item) => item.id === selectedPlanId
+                  )!;
+
+                  return (
+                    <TouchableOpacity
+                      key={cycle}
+                      style={[
+                        styles.cycleBox,
+                        billingCycle === cycle &&
+                          styles.activeCycleBox,
+                      ]}
+                      onPress={() => changeBillingCycle(cycle)}
+                    >
+                      <View style={styles.cycleBoxHeader}>
                         <Ionicons
-                          name="checkmark-circle"
+                          name="calendar-outline"
                           size={18}
                           color="#21479B"
                         />
-                      )}
-                    </View>
-                    <Text style={styles.cycleTitle}>
-                      {cycle === 'monthly' ? 'Mensal' : 'Anual · 10% OFF'}
-                    </Text>
-                    <Text style={styles.cyclePrice}>
-                      {formatCurrency(plan.price)}
-                      <Text style={styles.cyclePeriod}>/mês</Text>
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+
+                        {billingCycle === cycle && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={18}
+                            color="#21479B"
+                          />
+                        )}
+                      </View>
+
+                      <Text style={styles.cycleTitle}>
+                        {cycle === 'monthly'
+                          ? 'Mensal'
+                          : 'Anual · 10% OFF'}
+                      </Text>
+
+                      <Text style={styles.cyclePrice}>
+                        {formatCurrency(plan.price)}
+                        <Text style={styles.cyclePeriod}>
+                          /mês
+                        </Text>
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+              )}
             </View>
 
             <TouchableOpacity
               style={styles.termsRow}
-              onPress={() => setAcceptedTerms((value) => !value)}
+              onPress={() =>
+                setAcceptedTerms((value) => !value)
+              }
             >
               <Ionicons
-                name={acceptedTerms ? 'checkbox' : 'square-outline'}
+                name={
+                  acceptedTerms ? 'checkbox' : 'square-outline'
+                }
                 size={20}
                 color="#21479B"
               />
+
               <Text style={styles.termsText}>
-                Li e aceito os Termos de Uso e a Política de Privacidade.
+                Li e aceito os Termos de Uso e a Política de
+                Privacidade.
               </Text>
             </TouchableOpacity>
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Resumo da contratação</Text>
+              <Text style={styles.summaryTitle}>
+                Resumo da contratação
+              </Text>
+
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Pet</Text>
+
                 <Text style={styles.summaryValue}>
                   {selectedPet?.name || 'Selecione um pet'}
                 </Text>
               </View>
+
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Plano</Text>
+
                 <Text style={styles.summaryValue}>
                   {activePlanObj.title}
                 </Text>
               </View>
+
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Cobrança</Text>
+                <Text style={styles.summaryLabel}>
+                  Cobrança
+                </Text>
+
                 <Text style={styles.summaryValue}>
-                  {billingCycle === 'yearly' ? 'Anual' : 'Mensal'}
+                  {billingCycle === 'yearly'
+                    ? 'Anual'
+                    : 'Mensal'}
                 </Text>
               </View>
+
               <View style={styles.summaryDivider} />
+
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Total</Text>
+
                 <Text style={styles.summaryValueBold}>
                   {formatCurrency(totalPrice)}
                 </Text>
@@ -857,7 +1023,8 @@ export default function PrivatePlansScreen({
             <TouchableOpacity
               style={[
                 styles.primaryButton,
-                (!selectedPet || !acceptedTerms) && styles.disabledButton,
+                (!selectedPet || !acceptedTerms) &&
+                  styles.disabledButton,
               ]}
               disabled={!selectedPet || !acceptedTerms}
               onPress={handleContinue}
@@ -873,42 +1040,103 @@ export default function PrivatePlansScreen({
         {step === 'payment' && (
           <>
             <View style={styles.checkoutPetCard}>
-              {selectedPet && (
-                <Image
-                  source={selectedPet.avatar}
-                  style={styles.checkoutPetAvatar}
-                />
-              )}
+              {selectedPet &&
+                renderPetAvatar(selectedPet.avatar, true)}
+
               <View style={styles.petInfo}>
-                <Text style={styles.checkoutPetLabel}>PLANO PARA</Text>
-                <Text style={styles.petName}>{selectedPet?.name}</Text>
-                <Text style={styles.petBreed}>{activePlanObj.title}</Text>
+                <Text style={styles.checkoutPetLabel}>
+                  PLANO PARA
+                </Text>
+
+                <Text style={styles.petName}>
+                  {selectedPet?.name}
+                </Text>
+
+                <Text style={styles.petBreed}>
+                  {activePlanObj.title}
+                </Text>
               </View>
             </View>
 
-            <Text style={styles.sectionLabel}>FORMA DE PAGAMENTO</Text>
-            <View style={styles.paymentMethodsCol}>
-              {renderPaymentMethod(
-                'card',
-                'Cartão de crédito',
-                'Pague com seu cartão',
-                'card-outline'
-              )}
-              {renderPaymentMethod(
-                'pix',
-                'Pix',
-                'Pagamento à vista',
-                'qr-code-outline'
-              )}
-              {renderPaymentMethod(
-                'boleto',
-                'Boleto bancário',
-                'Pagamento à vista',
-                'barcode-outline'
-              )}
+            <Text style={styles.sectionLabel}>
+              FORMA DE PAGAMENTO
+            </Text>
+
+            <View style={styles.paymentOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.paymentOption,
+                  paymentMethod === 'card' && styles.paymentOptionActive,
+                ]}
+                onPress={() => setPaymentMethod('card')}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="card-outline"
+                  size={23}
+                  color={paymentMethod === 'card' ? '#21479B' : '#64748B'}
+                />
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={styles.paymentMethodText}>Cartão de crédito</Text>
+                  <Text style={styles.paymentMethodSubtitle}>Pague com cartão</Text>
+                </View>
+                <Ionicons
+                  name={paymentMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
+                  size={21}
+                  color={paymentMethod === 'card' ? '#21479B' : '#94A3B8'}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.paymentOption,
+                  paymentMethod === 'pix' && styles.paymentOptionActive,
+                ]}
+                onPress={() => setPaymentMethod('pix')}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="qr-code-outline"
+                  size={23}
+                  color={paymentMethod === 'pix' ? '#21479B' : '#64748B'}
+                />
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={styles.paymentMethodText}>Pix</Text>
+                  <Text style={styles.paymentMethodSubtitle}>Pagamento à vista</Text>
+                </View>
+                <Ionicons
+                  name={paymentMethod === 'pix' ? 'radio-button-on' : 'radio-button-off'}
+                  size={21}
+                  color={paymentMethod === 'pix' ? '#21479B' : '#94A3B8'}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.paymentOption,
+                  paymentMethod === 'boleto' && styles.paymentOptionActive,
+                ]}
+                onPress={() => setPaymentMethod('boleto')}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="barcode-outline"
+                  size={23}
+                  color={paymentMethod === 'boleto' ? '#21479B' : '#64748B'}
+                />
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={styles.paymentMethodText}>Boleto bancário</Text>
+                  <Text style={styles.paymentMethodSubtitle}>Pagamento por boleto</Text>
+                </View>
+                <Ionicons
+                  name={paymentMethod === 'boleto' ? 'radio-button-on' : 'radio-button-off'}
+                  size={21}
+                  color={paymentMethod === 'boleto' ? '#21479B' : '#94A3B8'}
+                />
+              </TouchableOpacity>
             </View>
 
-            {billingCycle === 'yearly' && paymentMethod === 'card' &&
+            {paymentMethod === 'card' && billingCycle === 'yearly' &&
               renderInstallments()}
 
             {paymentMethod === 'card' && (
@@ -926,9 +1154,7 @@ export default function PrivatePlansScreen({
                     maxLength={19}
                   />
 
-                  <Text style={styles.inputLabel}>
-                    Nome impresso no cartão
-                  </Text>
+                  <Text style={styles.inputLabel}>Nome impresso no cartão</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="NOME COMPLETO"
@@ -972,84 +1198,88 @@ export default function PrivatePlansScreen({
                     <Switch
                       value={saveCard}
                       onValueChange={setSaveCard}
-                      trackColor={{ false: '#CBD5E1', true: '#21479B' }}
+                      trackColor={{
+                        false: '#CBD5E1',
+                        true: '#21479B',
+                      }}
                     />
                   </View>
                 </View>
               </>
             )}
 
-            {paymentMethod !== 'card' && (
-              <View style={styles.paymentInfoBox}>
-                <Ionicons
-                  name={
-                    paymentMethod === 'pix'
-                      ? 'qr-code-outline'
-                      : 'barcode-outline'
-                  }
-                  size={38}
-                  color="#21479B"
-                />
-                <Text style={styles.paymentInfoTitle}>
-                  {paymentMethod === 'pix' ? 'Pagamento via Pix' : 'Pagamento via boleto'}
+            {paymentMethod === 'pix' && (
+              <View style={styles.alternativePaymentInfo}>
+                <Ionicons name="qr-code-outline" size={32} color="#21479B" />
+                <Text style={styles.alternativePaymentTitle}>Pagamento via Pix</Text>
+                <Text style={styles.alternativePaymentText}>
+                  Ao continuar, a solicitação de pagamento Pix ficará aguardando
+                  confirmação. O QR Code e o código Pix precisam ser gerados
+                  pelo sistema de pagamento integrado.
                 </Text>
-                <Text style={styles.paymentInfoText}>
-                  {paymentMethod === 'pix'
-                    ? 'O QR Code e o código Pix serão disponibilizados após integração com o gateway.'
-                    : 'O boleto bancário será disponibilizado após integração com o gateway.'}
+                <Text style={styles.alternativePaymentNote}>
+                  Esta versão de demonstração ainda não gera um QR Code válido.
                 </Text>
-                <Text style={styles.paymentInfoAmount}>
-                  {formatCurrency(totalPrice)}
+              </View>
+            )}
+
+            {paymentMethod === 'boleto' && (
+              <View style={styles.alternativePaymentInfo}>
+                <Ionicons name="barcode-outline" size={32} color="#21479B" />
+                <Text style={styles.alternativePaymentTitle}>Pagamento por boleto</Text>
+                <Text style={styles.alternativePaymentText}>
+                  Ao continuar, a solicitação do boleto ficará aguardando
+                  confirmação. A linha digitável e o PDF precisam ser fornecidos
+                  pelo sistema de pagamento integrado.
                 </Text>
-                <Text style={styles.paymentInfoHint}>
-                  A contratação ficará pendente até a confirmação do pagamento.
+                <Text style={styles.alternativePaymentNote}>
+                  Esta versão de demonstração ainda não gera um boleto válido.
                 </Text>
               </View>
             )}
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Resumo do pagamento</Text>
+              <Text style={styles.summaryTitle}>
+                Resumo do pagamento
+              </Text>
+
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Pet</Text>
-                <Text style={styles.summaryValue}>{selectedPet?.name}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Plano</Text>
-                <Text style={styles.summaryValue}>{activePlanObj.title}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Forma</Text>
+                <Text style={styles.summaryLabel}>
+                  Pet
+                </Text>
+
                 <Text style={styles.summaryValue}>
-                  {paymentMethod === 'card'
-                    ? 'Cartão de crédito'
-                    : paymentMethod === 'pix'
-                    ? 'Pix'
-                    : 'Boleto'}
+                  {selectedPet?.name}
                 </Text>
               </View>
 
-              {billingCycle === 'yearly' && paymentMethod === 'card' && (
-                <>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Parcelamento</Text>
-                    <Text style={styles.summaryValue}>
-                      {installments}x de {formattedInstallment}
-                    </Text>
-                  </View>
-                  {installments > 4 && (
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Juros</Text>
-                      <Text style={styles.summaryValue}>
-                        {formatCurrency(interestAmount)}
-                      </Text>
-                    </View>
-                  )}
-                </>
-              )}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Plano
+                </Text>
+
+                <Text style={styles.summaryValue}>
+                  {activePlanObj.title}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Ciclo
+                </Text>
+
+                <Text style={styles.summaryValue}>
+                  {billingCycle === 'yearly' ? 'Anual' : 'Mensal'}
+                </Text>
+              </View>
 
               <View style={styles.summaryDivider} />
+
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Valor total</Text>
+                <Text style={styles.summaryLabel}>
+                  Total
+                </Text>
+
                 <Text style={styles.summaryValueBold}>
                   {formatCurrency(finalPaymentTotal)}
                 </Text>
@@ -1062,225 +1292,139 @@ export default function PrivatePlansScreen({
               activeOpacity={0.85}
             >
               <Text style={styles.primaryButtonText}>
-                {paymentMethod === 'card'
-                  ? 'CONFIRMAR PAGAMENTO'
-                  : paymentMethod === 'pix'
-                  ? 'GERAR PIX'
-                  : 'GERAR BOLETO'}
+                CONFIRMAR PAGAMENTO
               </Text>
             </TouchableOpacity>
-
-            <Text style={styles.securePaymentText}>
-              <Ionicons name="lock-closed" size={12} color="#64748B" />{' '}
-              Ambiente demonstrativo de pagamento.
-            </Text>
           </>
         )}
 
-        {/* CARREGAMENTO PARA PIX E BOLETO */}
+        {/* CARREGAMENTO */}
         {step === 'loading' && (
           <View style={styles.loadingContainer}>
-            <View style={styles.loadingIconCircle}>
-              <Ionicons
-                name={paymentMethod === 'pix' ? 'qr-code-outline' : 'document-text-outline'}
-                size={38}
-                color="#21479B"
-              />
-            </View>
-
             <ActivityIndicator
               size="large"
               color="#21479B"
-              style={styles.loadingSpinner}
             />
 
             <Text style={styles.loadingTitle}>
-              Preparando sua contratação...
+              Preparando sua contratação
             </Text>
 
-            <Text style={styles.loadingDescription}>
-              Estamos organizando os dados do seu plano e preparando sua área
-              de acompanhamento.
-            </Text>
-
-            <View style={styles.loadingInfoCard}>
-              <Text style={styles.loadingInfoLabel}>PLANO SELECIONADO</Text>
-              <Text style={styles.loadingInfoValue}>{activePlanObj.title}</Text>
-
-              <View style={styles.summaryDivider} />
-
-              <Text style={styles.loadingInfoLabel}>PET</Text>
-              <Text style={styles.loadingInfoValue}>{selectedPet?.name}</Text>
-
-              <View style={styles.summaryDivider} />
-
-              <Text style={styles.loadingInfoLabel}>PAGAMENTO</Text>
-              <Text style={styles.loadingInfoValue}>
-                {paymentMethod === 'pix' ? 'Pix' : 'Boleto bancário'}
-              </Text>
-
-              <View style={styles.summaryDivider} />
-
-              <Text style={styles.loadingInfoLabel}>VALOR</Text>
-              <Text style={styles.loadingInfoValue}>
-                {formatCurrency(finalPaymentTotal)}
-              </Text>
-            </View>
-
-            <Text style={styles.loadingFooter}>
-              Aguarde alguns instantes...
+            <Text style={styles.loadingText}>
+              Aguarde enquanto processamos sua solicitação.
             </Text>
           </View>
         )}
 
-        {/* CONFIRMAÇÃO */}
+        {/* SUCESSO */}
         {step === 'success' && (
           <View style={styles.successContainer}>
-            <View style={styles.successTop}>
-              <View
-                style={[
-                  styles.successIconCircle,
-                  paymentStatus === 'pending' && styles.pendingIconCircle,
-                ]}
-              >
-                <Ionicons
-                  name={paymentStatus === 'paid' ? 'checkmark' : 'time-outline'}
-                  size={36}
-                  color="#FFFFFF"
-                />
-              </View>
-
-              <Text style={styles.successTitle}>
-                {paymentStatus === 'paid'
-                  ? 'Pagamento confirmado!'
-                  : 'Estamos aguardando seu pagamento'}
-              </Text>
-
-              <Text style={styles.successSubtitle}>
-                {paymentStatus === 'paid'
-                  ? `A simulação da contratação do ${activePlanObj.title} para ${selectedPet?.name} foi concluída.`
-                  : `Sua solicitação do ${activePlanObj.title} para ${selectedPet?.name} foi registrada. A ativação acontecerá após a confirmação do pagamento.`}
-              </Text>
+            <View
+              style={[
+                styles.successIcon,
+                paymentStatus === 'pending' && styles.pendingPaymentIcon,
+              ]}
+            >
+              <Ionicons
+                name={paymentStatus === 'paid' ? 'checkmark' : 'time-outline'}
+                size={42}
+                color="#FFFFFF"
+              />
             </View>
 
-            <View style={styles.successDetailsCard}>
-              <Text style={styles.successSectionTitle}>
+            <Text style={styles.successTitle}>
+              {paymentStatus === 'paid'
+                ? 'Pagamento concluído!'
+                : 'Pagamento aguardando confirmação'}
+            </Text>
+
+            <Text style={styles.successDescription}>
+              {paymentStatus === 'paid'
+                ? `O plano foi contratado para ${selectedPet?.name}.`
+                : `A contratação para ${selectedPet?.name} foi registrada e será ativada após a confirmação do pagamento.`}
+            </Text>
+
+            <View style={styles.successSummary}>
+              <Text style={styles.summaryTitle}>
                 Resumo da contratação
               </Text>
 
-              <View style={styles.successInfoRow}>
-                <Ionicons name="paw" size={21} color="#21479B" />
-                <View style={styles.successInfoContent}>
-                  <Text style={styles.successInfoLabel}>Pet vinculado</Text>
-                  <Text style={styles.successInfoValue}>
-                    {selectedPet?.name}
-                  </Text>
-                </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Pet</Text>
+
+                <Text style={styles.summaryValue}>
+                  {selectedPet?.name}
+                </Text>
               </View>
 
-              <View style={styles.successInfoRow}>
-                <Ionicons
-                  name="shield-checkmark"
-                  size={21}
-                  color="#21479B"
-                />
-                <View style={styles.successInfoContent}>
-                  <Text style={styles.successInfoLabel}>Plano contratado</Text>
-                  <Text style={styles.successInfoValue}>
-                    {activePlanObj.title}
-                  </Text>
-                </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Plano</Text>
+
+                <Text style={styles.summaryValue}>
+                  {activePlanObj.title}
+                </Text>
               </View>
 
-              <View style={styles.successInfoRow}>
-                <Ionicons
-                  name={
-                    paymentMethod === 'pix'
-                      ? 'qr-code'
-                      : paymentMethod === 'boleto'
-                      ? 'barcode'
-                      : 'card'
-                  }
-                  size={21}
-                  color="#21479B"
-                />
-                <View style={styles.successInfoContent}>
-                  <Text style={styles.successInfoLabel}>Pagamento</Text>
-                  <Text style={styles.successInfoValue}>
-                    {paymentMethod === 'card'
-                      ? 'Cartão de crédito'
-                      : paymentMethod === 'pix'
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Pagamento
+                </Text>
+
+                <Text style={styles.summaryValue}>
+                  {paymentMethod === 'card'
+                    ? 'Cartão de crédito'
+                    : paymentMethod === 'pix'
                       ? 'Pix'
                       : 'Boleto bancário'}
-                  </Text>
-                </View>
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Ciclo
+                </Text>
+
+                <Text style={styles.summaryValue}>
+                  {billingCycle === 'yearly' ? 'Anual' : 'Mensal'}
+                </Text>
               </View>
 
               <View style={styles.summaryDivider} />
-              <View style={styles.successTotalRow}>
-                <Text style={styles.successTotalLabel}>Valor total</Text>
-                <Text style={styles.successTotalValue}>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  {paymentStatus === 'paid' ? 'Total pago' : 'Total a pagar'}
+                </Text>
+
+                <Text style={styles.summaryValueBold}>
                   {formatCurrency(finalPaymentTotal)}
-                </Text>
-              </View>
-
-              {billingCycle === 'yearly' && paymentMethod === 'card' && (
-                <Text style={styles.successInstallmentText}>
-                  {installments}x de {formattedInstallment}
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.successNextSteps}>
-              <Text style={styles.successSectionTitle}>Próximos passos</Text>
-              <View style={styles.successStepRow}>
-                <Ionicons name="checkmark-circle" size={19} color="#16A36A" />
-                <Text style={styles.successStepText}>
-                  Solicitação registrada
-                </Text>
-              </View>
-              <View style={styles.successStepRow}>
-                <Ionicons
-                  name={paymentStatus === 'paid' ? 'checkmark-circle' : 'time'}
-                  size={19}
-                  color={paymentStatus === 'paid' ? '#16A36A' : '#D98200'}
-                />
-                <Text style={styles.successStepText}>
-                  {paymentStatus === 'paid'
-                    ? 'Pagamento aprovado na simulação'
-                    : 'Aguardando confirmação do pagamento'}
-                </Text>
-              </View>
-              <View style={styles.successStepRow}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={19}
-                  color="#94A3B8"
-                />
-                <Text style={styles.successStepText}>
-                  Ativação do plano após confirmação
                 </Text>
               </View>
             </View>
 
             <TouchableOpacity
               style={styles.primaryButton}
-              activeOpacity={0.85}
               onPress={() => {
                 if (onNavigateToMyPlan) {
                   onNavigateToMyPlan();
                 } else {
                   Alert.alert(
-                    'Navegação indisponível',
+                    'Meu Plano',
                     'A rota Meu Plano não foi configurada no AppNavigator.'
                   );
                 }
               }}
+              activeOpacity={0.85}
             >
               <Text style={styles.primaryButtonText}>
-                ACOMPANHAR MEU PLANO
+                {paymentStatus === 'paid' ? 'ACOMPANHAR MEU PLANO' : 'VOLTAR AO MEU PLANO'}
               </Text>
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color="#FFFFFF"
+              />
             </TouchableOpacity>
           </View>
         )}
@@ -1297,7 +1441,6 @@ export default function PrivatePlansScreen({
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1471,6 +1614,40 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 19,
   },
+  petSelectionDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 10,
+  },
+  petDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+  },
+  petDropdownSelected: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  petDropdownOptions: {
+    marginTop: 2,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: '#DCE6F5',
+  },
+  petAvatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF3FC',
+    borderWidth: 1,
+    borderColor: '#DCE6F5',
+  },
   petCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1509,11 +1686,6 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginTop: 2,
   },
-  petSelectionDescription: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 10,
-  },
   addPetCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1526,23 +1698,24 @@ const styles = StyleSheet.create({
   },
   detailsBox: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 15,
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#E8EDF5',
-    gap: 13,
+    borderColor: '#E2E8F0',
+    padding: 14,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   detailRowLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
   },
   detailRowText: {
     fontSize: 12,
@@ -1551,7 +1724,9 @@ const styles = StyleSheet.create({
   },
   detailRowMetric: {
     fontSize: 11,
-    color: '#64748B',
+    fontWeight: '700',
+    color: '#21479B',
+    marginLeft: 8,
   },
   cycleRow: {
     flexDirection: 'row',
@@ -1559,203 +1734,269 @@ const styles = StyleSheet.create({
   },
   cycleBox: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 13,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
   },
   activeCycleBox: {
-    borderColor: '#315BA8',
-    backgroundColor: '#F8FAFF',
-    borderWidth: 1.5,
+    borderColor: '#21479B',
+    backgroundColor: '#F5F8FF',
   },
   cycleBoxHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   cycleTitle: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#263650',
+    marginBottom: 7,
   },
   cyclePrice: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#21479B',
-    marginTop: 7,
   },
   cyclePeriod: {
     fontSize: 10,
-    color: '#64748B',
+    fontWeight: '400',
+    color: '#8490A2',
   },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
-    marginVertical: 16,
+    marginVertical: 18,
   },
   termsText: {
+    flex: 1,
     fontSize: 11,
     color: '#64748B',
-    flex: 1,
+    lineHeight: 17,
   },
   summaryCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 15,
+    backgroundColor: '#F8FAFF',
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 17,
-    gap: 11,
+    borderColor: '#DCE6F5',
+    padding: 15,
+    marginBottom: 18,
   },
   summaryTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#183B72',
-    marginBottom: 3,
+    color: '#263650',
+    marginBottom: 13,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    marginVertical: 6,
   },
   summaryLabel: {
     fontSize: 12,
     color: '#64748B',
-    flex: 1,
   },
   summaryValue: {
     fontSize: 12,
+    fontWeight: '700',
     color: '#263650',
-    fontWeight: '600',
-    textAlign: 'right',
   },
   summaryValueBold: {
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '900',
     color: '#21479B',
-    fontWeight: '800',
-    textAlign: 'right',
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#DCE6F5',
+    marginVertical: 10,
   },
   checkoutPetCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFF',
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 15,
+    padding: 13,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginTop: 8,
+    borderColor: '#DCE6F5',
+    marginBottom: 18,
   },
   checkoutPetAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 58,
+    height: 58,
+    borderRadius: 14,
   },
   checkoutPetLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    color: '#94A3B8',
-    marginBottom: 4,
+    color: '#8996AA',
+    marginBottom: 5,
   },
-  paymentMethodsCol: {
-    gap: 10,
-    marginBottom: 8,
+  paymentOptions: {
+    gap: 9,
+    marginBottom: 12,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DCE4EF',
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  paymentOptionActive: {
+    borderColor: '#21479B',
+    backgroundColor: '#F5F8FF',
+  },
+  alternativePaymentInfo: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#DCE6F5',
+    borderRadius: 15,
+    padding: 18,
+    marginBottom: 16,
+  },
+  alternativePaymentTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#263650',
+    marginTop: 10,
+    marginBottom: 7,
+  },
+  alternativePaymentText: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  alternativePaymentNote: {
+    fontSize: 10,
+    color: '#94A3B8',
+    lineHeight: 15,
+    textAlign: 'center',
+    marginTop: 9,
   },
   paymentMethodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DCE4EF',
     borderRadius: 14,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
-  },
-  activePaymentCard: {
-    backgroundColor: '#F0F5FF',
-    borderColor: '#315BA8',
+    marginBottom: 12,
   },
   paymentMethodInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   paymentMethodText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  paymentMethodTextActive: {
-    color: '#21479B',
+    fontWeight: '800',
+    color: '#263650',
   },
   paymentMethodSubtitle: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#64748B',
-    marginTop: 3,
+    marginTop: 4,
   },
-  paymentMethodSubtitleActive: {
+  cardForm: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 15,
+    padding: 14,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 7,
+    marginTop: 10,
+  },
+  input: {
+    height: 46,
+    borderWidth: 1,
+    borderColor: '#DCE4EF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    color: '#263650',
+    fontSize: 13,
+  },
+  rowInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  switchLabel: {
+    flex: 1,
+    fontSize: 11,
     color: '#64748B',
   },
   installmentsContainer: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFF',
+    borderRadius: 15,
     padding: 14,
-    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DCE6F5',
   },
   installmentsDescription: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
     marginBottom: 12,
   },
   installmentDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    padding: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#DCE4EF',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
   },
   installmentDropdownTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#263650',
   },
   installmentDropdownSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#64748B',
     marginTop: 4,
   },
   installmentOptions: {
     marginTop: 8,
-    gap: 7,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   installmentDropdownOption: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    padding: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   installmentDropdownOptionActive: {
     backgroundColor: '#21479B',
-    borderColor: '#21479B',
   },
   installmentNumber: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#334155',
+    color: '#263650',
   },
   installmentNumberActive: {
     color: '#FFFFFF',
@@ -1767,271 +2008,92 @@ const styles = StyleSheet.create({
   },
   installmentResult: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 15,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    justifyContent: 'space-between',
+    marginTop: 14,
   },
   installmentResultLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
   },
   installmentResultValue: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
     color: '#21479B',
   },
   interestInfo: {
     marginTop: 10,
-    gap: 5,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#DCE6F5',
   },
   interestText: {
     fontSize: 11,
-    color: '#475569',
+    color: '#64748B',
+    marginBottom: 4,
   },
   installmentDisclaimer: {
     fontSize: 10,
     color: '#94A3B8',
-    marginTop: 9,
-    lineHeight: 15,
-  },
-  cardForm: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
     marginTop: 10,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    height: 46,
-    color: '#0F172A',
-    fontSize: 13,
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 14,
-    gap: 10,
-  },
-  switchLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    flex: 1,
-  },
-  paymentInfoBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 10,
-  },
-  paymentInfoTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#263650',
-  },
-  paymentInfoText: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  paymentInfoAmount: {
-    fontSize: 21,
-    fontWeight: '800',
-    color: '#21479B',
-  },
-  paymentInfoHint: {
-    fontSize: 11,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  securePaymentText: {
-    fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 15,
+    lineHeight: 15,
   },
   loadingContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 45,
-    paddingBottom: 45,
-  },
-  loadingIconCircle: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: '#F0F5FF',
+    minHeight: 350,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25,
-  },
-  loadingSpinner: {
-    marginBottom: 22,
+    padding: 25,
   },
   loadingTitle: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#183B72',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  loadingDescription: {
-    fontSize: 12,
-    lineHeight: 19,
-    color: '#748096',
-    textAlign: 'center',
-    marginBottom: 25,
-    paddingHorizontal: 12,
-  },
-  loadingInfoCard: {
-    width: '100%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 18,
-    gap: 9,
-  },
-  loadingInfoLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#94A3B8',
-  },
-  loadingInfoValue: {
-    fontSize: 14,
-    fontWeight: '700',
     color: '#263650',
+    marginTop: 18,
   },
-  loadingFooter: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 22,
+  loadingText: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 8,
   },
   successContainer: {
-    width: '100%',
-    paddingTop: 18,
-    paddingBottom: 25,
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 25,
   },
-  successTop: {
-    alignItems: 'center',
-    marginBottom: 22,
+  pendingPaymentIcon: {
+    backgroundColor: '#D97706',
   },
-  successIconCircle: {
+  successIcon: {
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#16A36A',
-    justifyContent: 'center',
+    backgroundColor: '#10B981',
     alignItems: 'center',
-    marginBottom: 17,
-  },
-  pendingIconCircle: {
-    backgroundColor: '#E08300',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 18,
   },
   successTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#17233F',
-    textAlign: 'center',
-    marginBottom: 9,
-  },
-  successSubtitle: {
-    fontSize: 12,
-    lineHeight: 19,
-    color: '#748096',
-    textAlign: 'center',
-  },
-  successDetailsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 19,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E8EDF5',
-    marginBottom: 14,
-  },
-  successSectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#183B72',
-    marginBottom: 15,
-  },
-  successInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-    gap: 12,
-  },
-  successInfoContent: {
-    flex: 1,
-  },
-  successInfoLabel: {
-    fontSize: 10,
-    color: '#8995A8',
-    marginBottom: 3,
-  },
-  successInfoValue: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 21,
+    fontWeight: '900',
     color: '#263650',
+    textAlign: 'center',
   },
-  successTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  successTotalLabel: {
+  successDescription: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#46546D',
-  },
-  successTotalValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#21479B',
-  },
-  successInstallmentText: {
-    textAlign: 'right',
-    fontSize: 11,
     color: '#64748B',
-    marginTop: 5,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 22,
   },
-  successNextSteps: {
-    backgroundColor: '#FFF8EB',
-    borderRadius: 16,
-    padding: 17,
-    marginBottom: 17,
-  },
-  successStepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 10,
-  },
-  successStepText: {
-    fontSize: 11,
-    color: '#536176',
-    flex: 1,
+  successSummary: {
+    backgroundColor: '#F8FAFF',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#DCE6F5',
+    padding: 15,
+    marginBottom: 20,
   },
 });

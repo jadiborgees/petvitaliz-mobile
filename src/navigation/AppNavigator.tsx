@@ -10,7 +10,6 @@ import {
 // Telas públicas
 import SplashScreen from '../screens/public/SplashScreen';
 import HomeScreen from '../screens/public/HomeScreen';
-import ExploreScreen from '../screens/public/ExploreScreen';
 import PlansScreen from '../screens/public/PlansScreen';
 import BenefitsScreen from '../screens/public/BenefitsScreen';
 import ProfileScreen from '../screens/public/ProfileScreen';
@@ -40,7 +39,12 @@ import PrivateBenefitsScreen from '../screens/private/PrivateBenefitsScreen';
 import PrivatePersonalDataScreen from '../screens/private/PrivatePersonalDataScreen';
 import PrivatePaymentMethodsScreen from '../screens/private/PrivatePaymentMethodsScreen';
 import PrivatePetsFlowScreen from '../screens/private/PrivatePetsFlowScreen';
-import PrivateConsultationsScreen from '../screens/private/PrivateConsultationsScreen';
+import type { Pet } from '../screens/private/PrivatePetsFlowScreen';
+
+import PrivateConsultationsScreen, {
+  type ConsultationAppointment,
+} from '../screens/private/PrivateConsultationsScreen';
+
 import PrivateNotificationsScreen from '../screens/private/PrivateNotificationsScreen';
 import PrivateSecurityScreen from '../screens/private/PrivateSecurityScreen';
 import PrivateHelpSupportScreen from '../screens/private/PrivateHelpSupportScreen';
@@ -84,6 +88,7 @@ type Screen =
 
 // Dados da assinatura
 type PlanSubscription = {
+  petId: string;
   planId: string;
   planName: string;
   petName: string;
@@ -116,11 +121,18 @@ export default function AppNavigator() {
   const [userPhone, setUserPhone] = useState('(11) 98765-4321');
   const [userCpf, setUserCpf] = useState('123.456.789-00');
 
-  // Dados da contratação
+  // Lista compartilhada de pets
+  const [userPets, setUserPets] = useState<Pet[]>([]);
+
+  // Assinatura contratada
   const [planSubscription, setPlanSubscription] =
     useState<PlanSubscription | null>(null);
 
-  // Faturas: serão preenchidas quando conectarmos os dados de cobrança
+  // Agendamentos compartilhados entre as telas
+  const [consultationAppointments, setConsultationAppointments] =
+    useState<ConsultationAppointment[]>([]);
+
+  // Faturas
   const [invoices] = useState<Invoice[]>([]);
 
   const currentScreen = stack[stack.length - 1];
@@ -136,7 +148,7 @@ export default function AppNavigator() {
 
   const back = useCallback(() => {
     setStack((prev) =>
-      prev.length > 1 ? prev.slice(0, -1) : prev
+      prev.length > 1 ? prev.slice(0, -1) : prev,
     );
   }, []);
 
@@ -163,7 +175,7 @@ export default function AppNavigator() {
         }
 
         return false;
-      }
+      },
     );
 
     return () => sub.remove();
@@ -183,12 +195,12 @@ export default function AppNavigator() {
     onNavigateToHome: () => reset('PrivateHome'),
     onNavigateToExplore: () => reset('PrivateExplore'),
 
-    // A coroa abre Meu Plano quando existe uma assinatura.
-    // Caso contrário, abre a vitrine de planos.
-    onNavigateToPlans: () =>
-      reset(planSubscription ? 'PrivateMyPlan' : 'PrivatePlans'),
+    onNavigateToPlans: () => {
+      reset(planSubscription ? 'PrivateMyPlan' : 'PrivatePlans');
+    },
 
     onNavigateToMyPlan: () => reset('PrivateMyPlan'),
+
     onNavigateToBenefits: () => reset('PrivateBenefits'),
     onNavigateToProfile: () => reset('PrivateProfile'),
   };
@@ -402,7 +414,10 @@ export default function AppNavigator() {
         return (
           <PrivatePlansScreen
             {...privateTabs}
-            onPurchaseComplete={setPlanSubscription}
+            pets={userPets}
+            onPurchaseComplete={(subscription) => {
+              setPlanSubscription(subscription);
+            }}
             onNavigateToAddPet={() => push('PrivatePetsFlow')}
             onNavigateToMyPlan={() => reset('PrivateMyPlan')}
           />
@@ -418,8 +433,10 @@ export default function AppNavigator() {
             onNavigateToManagePlan={() => push('PrivateManagePlan')}
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
             onNavigateToInvoices={() => push('PrivateInvoices')}
+            onNavigateToPets={() => push('PrivatePetsFlow')}
             subscription={planSubscription}
             invoices={invoices}
+            pets={userPets}
           />
         );
 
@@ -435,13 +452,15 @@ export default function AppNavigator() {
             onChangeBillingCycle={(cycle) => {
               Alert.alert(
                 'Alteração de cobrança',
-                `O ciclo selecionado foi ${cycle === 'yearly' ? 'anual' : 'mensal'}. A confirmação da alteração deverá ser feita no fluxo de pagamento.`
+                `O ciclo selecionado foi ${
+                  cycle === 'yearly' ? 'anual' : 'mensal'
+                }. A confirmação da alteração deverá ser feita no fluxo de pagamento.`,
               );
             }}
             onCancelSubscription={() => {
               Alert.alert(
                 'Cancelamento',
-                'A solicitação de cancelamento ainda precisa ser conectada ao backend.'
+                'A solicitação de cancelamento ainda precisa ser conectada ao backend.',
               );
             }}
           />
@@ -462,8 +481,8 @@ export default function AppNavigator() {
                   {
                     style: 'currency',
                     currency: 'BRL',
-                  }
-                )}\n\nO pagamento desta fatura ainda precisa ser conectado ao checkout.`
+                  },
+                )}\n\nO pagamento desta fatura ainda precisa ser conectado ao checkout.`,
               );
             }}
           />
@@ -501,19 +520,27 @@ export default function AppNavigator() {
           />
         );
 
+      // Meus Pets
       case 'PrivatePetsFlow':
         return (
           <PrivatePetsFlowScreen
             {...privateTabs}
             onBack={back}
+            pets={userPets}
+            onPetsChange={setUserPets}
           />
         );
 
+      // Consultas
       case 'PrivateConsultations':
         return (
           <PrivateConsultationsScreen
             {...privateTabs}
             onBack={back}
+            pets={userPets}
+            subscription={planSubscription}
+            appointments={consultationAppointments}
+            onAppointmentsChange={setConsultationAppointments}
           />
         );
 

@@ -9,14 +9,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-interface PrivateBottomNavProps {
-  currentRoute:
-    | 'PrivateHome'
-    | 'PrivateExplore'
-    | 'PrivatePlans'
-    | 'PrivateBenefits'
-    | 'PrivateProfile';
+type PrivateRoute =
+  | 'PrivateHome'
+  | 'PrivateExplore'
+  | 'PrivatePlans'
+  | 'PrivateMyPlan'
+  | 'PrivateManagePlan'
+  | 'PrivateInvoices'
+  | 'PrivateBenefits'
+  | 'PrivateProfile';
 
+interface PrivateBottomNavProps {
+  currentRoute: PrivateRoute;
   onNavigateToHome?: () => void;
   onNavigateToExplore?: () => void;
   onNavigateToPlans?: () => void;
@@ -64,42 +68,42 @@ function Tab({
 export default function PrivateBottomNav({
   currentRoute,
   onNavigateToHome,
+  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
 }: PrivateBottomNavProps) {
+  const isHomeActive = currentRoute === 'PrivateHome';
 
-  const color = (
-    route: PrivateBottomNavProps['currentRoute']
-  ) =>
-    currentRoute === route
-      ? ACTIVE_ICON_COLOR
-      : INACTIVE_ICON_COLOR;
+  const isPlanActive = [
+    'PrivatePlans',
+    'PrivateMyPlan',
+    'PrivateManagePlan',
+    'PrivateInvoices',
+  ].includes(currentRoute);
+
+  const isBenefitsActive = currentRoute === 'PrivateBenefits';
+  const isProfileActive = currentRoute === 'PrivateProfile';
 
   return (
     <View style={styles.bottomBarWrapper}>
       <View style={styles.bottomBar}>
-
         {/* Início */}
         <Tab
-          active={currentRoute === 'PrivateHome'}
+          active={isHomeActive}
           label="Início"
           onPress={onNavigateToHome}
         >
           <Ionicons
-            name={
-              currentRoute === 'PrivateHome'
-                ? 'home'
-                : 'home-outline'
-            }
+            name={isHomeActive ? 'home' : 'home-outline'}
             size={22}
-            color={color('PrivateHome')}
+            color={isHomeActive ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR}
           />
         </Tab>
 
         {/* Plano */}
         <Tab
-          active={currentRoute === 'PrivatePlans'}
+          active={isPlanActive}
           label="Plano"
           onPress={onNavigateToPlans}
         >
@@ -107,7 +111,11 @@ export default function PrivateBottomNav({
             source={require('../assets/coroa_outline.png')}
             style={[
               styles.crownIcon,
-              { tintColor: color('PrivatePlans') },
+              {
+                tintColor: isPlanActive
+                  ? ACTIVE_ICON_COLOR
+                  : INACTIVE_ICON_COLOR,
+              },
             ]}
             resizeMode="contain"
           />
@@ -115,38 +123,29 @@ export default function PrivateBottomNav({
 
         {/* Benefícios */}
         <Tab
-          active={currentRoute === 'PrivateBenefits'}
+          active={isBenefitsActive}
           label="Benefícios"
           onPress={onNavigateToBenefits}
         >
           <Ionicons
-            name={
-              currentRoute === 'PrivateBenefits'
-                ? 'gift'
-                : 'gift-outline'
-            }
+            name={isBenefitsActive ? 'gift' : 'gift-outline'}
             size={22}
-            color={color('PrivateBenefits')}
+            color={isBenefitsActive ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR}
           />
         </Tab>
 
         {/* Perfil */}
         <Tab
-          active={currentRoute === 'PrivateProfile'}
+          active={isProfileActive}
           label="Perfil"
           onPress={onNavigateToProfile}
         >
           <Ionicons
-            name={
-              currentRoute === 'PrivateProfile'
-                ? 'person'
-                : 'person-outline'
-            }
+            name={isProfileActive ? 'person' : 'person-outline'}
             size={22}
-            color={color('PrivateProfile')}
+            color={isProfileActive ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR}
           />
         </Tab>
-
       </View>
     </View>
   );
