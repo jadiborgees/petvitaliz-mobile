@@ -75,7 +75,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 
   return (
     <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
-      <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
+      <StatusBar barStyle="light-content" />
 
 
       {/* Patinhas */}

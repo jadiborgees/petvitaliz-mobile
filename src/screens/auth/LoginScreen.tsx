@@ -60,7 +60,7 @@ export default function LoginScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#21479B" />
+      <StatusBar barStyle="light-content" />
 
       {/* Cabeçalho Azul Superior */}
       <View style={styles.header}>

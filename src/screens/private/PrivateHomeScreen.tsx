@@ -189,12 +189,12 @@ export default function PrivateHomeScreen({
     : []; 
 
   // Carrossel de banners
-  const bannerRef = useRef<ScrollView>(null);
+  const bannerRef = useRef<any>(null);
   const [bannerIndex, setBannerIndex] = useState(0);
   const totalBanners = BANNERS.length;
 
   // Carrossel de serviços
-  const servicesRef = useRef<ScrollView>(null);
+  const servicesRef = useRef<any>(null);
   const [serviceIndex, setServiceIndex] = useState(0);
 
   // Fechar menu e executar ação
@@ -1542,7 +1542,7 @@ const styles = StyleSheet.create({
   },
 
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15,23,42,0.48)',
   },
 

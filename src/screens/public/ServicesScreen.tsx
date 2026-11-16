@@ -27,7 +27,7 @@ export default function ServicesScreen({
 }: ServicesScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Topo / Header */}
       <View style={styles.header}>

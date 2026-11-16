@@ -17,7 +17,7 @@ const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight ||
 export default function PrivateHeader({ title, onBack, right }: PrivateHeaderProps) {
   return (
     <View style={styles.wrapper}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.card} />
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <View style={styles.side}>
           {onBack && (

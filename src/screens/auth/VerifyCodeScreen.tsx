@@ -52,7 +52,7 @@ export default function VerifyCodeScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#21479B" />
+      <StatusBar barStyle="light-content" />
 
       {/* Cabeçalho */}
       <View style={styles.header}>

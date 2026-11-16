@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   View,
@@ -69,7 +68,7 @@ export default function PrivateAccountMenu({
       onPress={() => navigate(action)}
     >
       <View style={styles.menuItemIcon}>
-        <Ionicons name={icon} size={20} color="#21479B" />
+        <Ionicons name={icon} size={20} color="#183C98" />
       </View>
 
       <Text style={styles.menuItemText}>{title}</Text>
@@ -90,7 +89,7 @@ export default function PrivateAccountMenu({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <StatusBar backgroundColor="rgba(15,23,42,0.45)" />
+      <StatusBar />
 
       <View style={styles.modalContainer}>
         <Pressable
@@ -157,7 +156,7 @@ export default function PrivateAccountMenu({
                 onPress={() => navigate(onNavigateToPets)}
               >
                 <View style={styles.shortcutIcon}>
-                  <Ionicons name="paw-outline" size={23} color="#21479B" />
+                  <Ionicons name="paw-outline" size={23} color="#183C98" />
                 </View>
                 <Text style={styles.shortcutTitle}>Meus Pets</Text>
                 <Text style={styles.shortcutSubtitle}>Animais cadastrados</Text>
@@ -169,7 +168,7 @@ export default function PrivateAccountMenu({
                 onPress={() => navigate(onNavigateToConsultations)}
               >
                 <View style={styles.shortcutIcon}>
-                  <Ionicons name="calendar-outline" size={23} color="#21479B" />
+                  <Ionicons name="calendar-outline" size={23} color="#183C98" />
                 </View>
                 <Text style={styles.shortcutTitle}>Consultas</Text>
                 <Text style={styles.shortcutSubtitle}>Meus agendamentos</Text>
@@ -247,7 +246,7 @@ const styles = StyleSheet.create({
   },
 
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15,23,42,0.48)',
   },
 
@@ -342,7 +341,7 @@ const styles = StyleSheet.create({
   viewProfile: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#21479B',
+    color: '#183C98',
     marginTop: 5,
   },
 

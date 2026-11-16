@@ -84,7 +84,7 @@ export default function PrivateServicesScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>

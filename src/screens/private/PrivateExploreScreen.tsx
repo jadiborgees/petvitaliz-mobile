@@ -41,13 +41,13 @@ export default function PrivateExploreScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Cabeçalho */}
       <View style={styles.header}>
         {onBack && (
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <Ionicons name="chevron-back" size={24} color="#21479B" />
+            <Ionicons name="chevron-back" size={24} color="#183C98" />
           </TouchableOpacity>
         )}
         <Text style={styles.headerTitle}>Explorar</Text>
@@ -85,7 +85,7 @@ export default function PrivateExploreScreen({
           {categories.map((cat) => (
             <TouchableOpacity key={cat.id} style={styles.categoryCard} activeOpacity={0.8}>
               <View style={styles.categoryIconCircle}>
-                <Ionicons name={cat.icon as any} size={22} color="#21479B" />
+                <Ionicons name={cat.icon as any} size={22} color="#183C98" />
               </View>
               <Text style={styles.categoryName}>{cat.name}</Text>
             </TouchableOpacity>
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#21479B',
+    color: '#183C98',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   seeAllLink: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#21479B',
+    color: '#183C98',
   },
   categoriesScroll: {
     marginBottom: 20,

@@ -27,7 +27,7 @@ export default function HowItWorksScreen({
 }: HowItWorksScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Topo / Header */}
       <View style={styles.header}>

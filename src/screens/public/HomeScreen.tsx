@@ -60,7 +60,7 @@ export default function HomeScreen({
   onChoosePlan,
   onOpenPlans,
 }: HomeScreenProps) {
-  const bannerRef = useRef<ScrollView>(null);
+  const bannerRef = useRef<any>(null);
   const [bannerIndex, setBannerIndex] = useState(0);
 
   // Troca de banner sozinha a cada 5 segundos.
@@ -77,7 +77,7 @@ export default function HomeScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
+      <StatusBar barStyle="dark-content" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Topo */}
         <View style={styles.top}>
