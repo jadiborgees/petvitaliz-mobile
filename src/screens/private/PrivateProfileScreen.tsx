@@ -14,6 +14,18 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
 
+const COLORS = {
+  primary: '#21479B',
+  background: '#F7F9FC',
+  surface: '#FFFFFF',
+  text: '#17233F',
+  secondary: '#66758C',
+  muted: '#94A3B8',
+  border: '#E8EDF4',
+  danger: '#C73D3D',
+  dangerBackground: '#FFF5F5',
+};
+
 interface PrivateProfileScreenProps {
   onBack?: () => void;
   onNavigateToHome?: () => void;
@@ -29,7 +41,6 @@ interface PrivateProfileScreenProps {
   onNavigateToSecurity?: () => void;
   onNavigateToHelp?: () => void;
   onLogout?: () => void;
-
   userName?: string;
   userEmail?: string;
   profileImage?: string | null;
@@ -61,22 +72,32 @@ export default function PrivateProfileScreen({
     icon: keyof typeof Ionicons.glyphMap,
     title: string,
     onPress?: () => void,
+    isLast = false,
   ) => (
     <TouchableOpacity
-      style={styles.menuRow}
-      activeOpacity={0.7}
+      key={title}
+      style={[
+        styles.menuRow,
+        !isLast && styles.menuRowBorder,
+      ]}
+      activeOpacity={0.65}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
     >
-      <View style={styles.menuIconCircle}>
-        <Ionicons name={icon} size={18} color="#21479B" />
-      </View>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={COLORS.primary}
+        style={styles.menuIcon}
+      />
 
       <Text style={styles.menuText}>{title}</Text>
 
       <Ionicons
-        name="chevron-forward"
-        size={18}
-        color="#94A3B8"
+        name="chevron-forward-outline"
+        size={16}
+        color={COLORS.muted}
       />
     </TouchableOpacity>
   );
@@ -84,32 +105,34 @@ export default function PrivateProfileScreen({
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor="#21479B"
+        barStyle="dark-content"
+        backgroundColor={COLORS.background}
       />
 
-      {/* Cabeçalho */}
-      <View style={styles.headerBackground}>
-        <View style={styles.headerTopRow}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBack || onNavigateToHome}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={24}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onBack || onNavigateToHome}
+          activeOpacity={0.7}
+          accessibilityLabel="Voltar"
+        >
+          <Ionicons
+            name="arrow-back-outline"
+            size={22}
+            color={COLORS.text}
+          />
+        </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Perfil</Text>
+        <Text style={styles.headerTitle}>Meu perfil</Text>
 
-          <View style={styles.headerSpacer} />
-        </View>
+        <View style={styles.headerSpacer} />
+      </View>
 
-        {/* Foto do usuário */}
-        <View style={styles.avatarContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.profileCard}>
           <View style={styles.avatarCircle}>
             {profileImage ? (
               <Image
@@ -120,51 +143,45 @@ export default function PrivateProfileScreen({
             ) : (
               <Ionicons
                 name="person-outline"
-                size={42}
-                color="#64748B"
+                size={31}
+                color={COLORS.primary}
               />
             )}
           </View>
-        </View>
-      </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Informações do usuário */}
-        <View style={styles.userInfoContainer}>
-          <Text style={styles.userName}>
-            {displayName}
-          </Text>
-
-          {!!displayEmail && (
-            <Text style={styles.userEmail}>
-              {displayEmail}
+          <View style={styles.profileDetails}>
+            <Text style={styles.userName}>
+              {displayName}
             </Text>
-          )}
+
+            {!!displayEmail && (
+              <Text style={styles.userEmail}>
+                {displayEmail}
+              </Text>
+            )}
+
+            <Text style={styles.accountCaption}>
+              Informações da sua conta
+            </Text>
+          </View>
         </View>
 
-        {/* CONTA */}
         <Text style={styles.sectionLabel}>CONTA</Text>
 
         <View style={styles.cardGroup}>
           {renderMenuItem(
             'person-outline',
-            'Dados Pessoais',
+            'Dados pessoais',
             onNavigateToPersonalData,
           )}
-
-          <View style={styles.divider} />
-
           {renderMenuItem(
             'card-outline',
-            'Formas de Pagamento',
+            'Formas de pagamento',
             onNavigateToPaymentMethods,
+            true,
           )}
         </View>
 
-        {/* PETS E CONSULTAS */}
         <Text style={styles.sectionLabel}>
           PETS E CONSULTAS
         </Text>
@@ -172,20 +189,17 @@ export default function PrivateProfileScreen({
         <View style={styles.cardGroup}>
           {renderMenuItem(
             'paw-outline',
-            'Meus Pets',
+            'Meus pets',
             onNavigateToPets,
           )}
-
-          <View style={styles.divider} />
-
           {renderMenuItem(
-            'medical-outline',
-            'Minhas Consultas',
+            'calendar-clear-outline',
+            'Minhas consultas',
             onNavigateToConsultations,
+            true,
           )}
         </View>
 
-        {/* PREFERÊNCIAS */}
         <Text style={styles.sectionLabel}>
           PREFERÊNCIAS
         </Text>
@@ -196,43 +210,41 @@ export default function PrivateProfileScreen({
             'Notificações',
             onNavigateToNotifications,
           )}
-
-          <View style={styles.divider} />
-
           {renderMenuItem(
-            'lock-closed-outline',
+            'shield-checkmark-outline',
             'Segurança',
             onNavigateToSecurity,
           )}
-
-          <View style={styles.divider} />
-
           {renderMenuItem(
-            'help-circle-outline',
-            'Ajuda e Suporte',
+            'headset-outline',
+            'Ajuda e suporte',
             onNavigateToHelp,
+            true,
           )}
         </View>
 
-        {/* Sair da conta */}
         <TouchableOpacity
           style={styles.logoutButton}
-          activeOpacity={0.8}
+          activeOpacity={0.75}
           onPress={onLogout}
+          accessibilityRole="button"
         >
           <Ionicons
             name="log-out-outline"
-            size={18}
-            color="#DC2626"
+            size={19}
+            color={COLORS.danger}
           />
 
           <Text style={styles.logoutText}>
-            Sair da Conta
+            Sair da conta
           </Text>
         </TouchableOpacity>
+
+        <Text style={styles.footerText}>
+          PetVitaliz · Sua saúde, nosso cuidado.
+        </Text>
       </ScrollView>
 
-      {/* Navegação inferior */}
       <PrivateBottomNav
         currentRoute="PrivateProfile"
         onNavigateToHome={onNavigateToHome}
@@ -248,57 +260,64 @@ export default function PrivateProfileScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
   },
 
-  headerBackground: {
-    backgroundColor: '#21479B',
-    paddingTop:
-      Platform.OS === 'android'
-        ? (StatusBar.currentHeight || 24) + 8
-        : 12,
-    paddingBottom: 36,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-
-  headerTopRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingTop:
+      Platform.OS === 'android'
+        ? (StatusBar.currentHeight || 24) + 8
+        : 14,
+    paddingBottom: 16,
+    backgroundColor: COLORS.background,
   },
 
   backButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
+    alignItems: 'flex-start',
   },
 
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.3,
   },
 
   headerSpacer: {
-    width: 32,
+    width: 36,
   },
 
-  avatarContainer: {
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 120,
+  },
+
+  profileCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 30,
   },
 
   avatarCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#E2E8F0',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EEF3FC',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
     overflow: 'hidden',
   },
 
@@ -307,89 +326,94 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 110,
-  },
-
-  userInfoContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
+  profileDetails: {
+    flex: 1,
+    marginLeft: 15,
   },
 
   userName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.4,
   },
 
   userEmail: {
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
+    color: COLORS.secondary,
+    marginTop: 4,
+  },
+
+  accountCaption: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 6,
   },
 
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#94A3B8',
-    marginBottom: 8,
-    marginTop: 12,
+    letterSpacing: 1.15,
+    color: '#8C9CB4',
+    marginBottom: 11,
+    marginTop: 4,
   },
 
   cardGroup: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 17,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: COLORS.border,
+    paddingHorizontal: 15,
+    marginBottom: 26,
     overflow: 'hidden',
-    marginBottom: 8,
   },
 
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    minHeight: 59,
   },
 
-  menuIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+  menuRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F3F8',
+  },
+
+  menuIcon: {
+    width: 30,
+    marginRight: 10,
   },
 
   menuText: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginLeft: 62,
+    fontWeight: '500',
+    color: COLORS.text,
+    letterSpacing: 0.05,
   },
 
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 16,
-    height: 48,
-    marginTop: 20,
-    gap: 8,
+    gap: 9,
+    minHeight: 50,
+    backgroundColor: COLORS.dangerBackground,
+    borderRadius: 14,
+    marginTop: 1,
   },
 
   logoutText: {
-    color: '#DC2626',
-    fontWeight: '800',
+    color: COLORS.danger,
     fontSize: 13,
+    fontWeight: '600',
+  },
+
+  footerText: {
+    textAlign: 'center',
+    fontSize: 10,
+    color: COLORS.muted,
+    marginTop: 23,
   },
 });

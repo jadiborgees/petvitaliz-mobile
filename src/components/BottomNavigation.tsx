@@ -1,13 +1,11 @@
-
 import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface BottomNavigationProps {
   currentRoute: 'Home' | 'Explore' | 'Plans' | 'Benefits' | 'Profile';
@@ -38,19 +36,16 @@ function Tab({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <View style={styles.iconSlot}>
-        {active ? (
-          <View style={styles.activeCircle}>
-            {children}
-          </View>
-        ) : (
-          children
-        )}
+      {/* Aba ativa: bloco azul com ícone e nome dentro */}
+      <View style={active ? styles.activePill : styles.tabContent}>
+        {children}
+        <Text
+          style={active ? styles.activeTabText : styles.tabText}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
       </View>
-
-      <Text style={active ? styles.activeTabText : styles.tabText}>
-        {label}
-      </Text>
     </TouchableOpacity>
   );
 }
@@ -62,7 +57,6 @@ export default function BottomNavigation({
   onNavigateToBenefits,
   onNavigateToProfile,
 }: BottomNavigationProps) {
-
   const color = (
     route: BottomNavigationProps['currentRoute']
   ) =>
@@ -72,7 +66,6 @@ export default function BottomNavigation({
 
   return (
     <View style={styles.bottomBar}>
-
       {/* INÍCIO */}
       <Tab
         active={currentRoute === 'Home'}
@@ -81,7 +74,7 @@ export default function BottomNavigation({
       >
         <Ionicons
           name={currentRoute === 'Home' ? 'home' : 'home-outline'}
-          size={22}
+          size={20}
           color={color('Home')}
         />
       </Tab>
@@ -92,13 +85,10 @@ export default function BottomNavigation({
         label="Plano"
         onPress={onNavigateToPlans}
       >
-        <Image
-          source={require('../assets/coroa_outline.png')}
-          style={[
-            styles.crownIcon,
-            { tintColor: color('Plans') },
-          ]}
-          resizeMode="contain"
+        <MaterialCommunityIcons
+          name={currentRoute === 'Plans' ? 'crown' : 'crown-outline'}
+          size={20}
+          color={color('Plans')}
         />
       </Tab>
 
@@ -110,7 +100,7 @@ export default function BottomNavigation({
       >
         <Ionicons
           name={currentRoute === 'Benefits' ? 'gift' : 'gift-outline'}
-          size={22}
+          size={20}
           color={color('Benefits')}
         />
       </Tab>
@@ -123,11 +113,10 @@ export default function BottomNavigation({
       >
         <Ionicons
           name={currentRoute === 'Profile' ? 'person' : 'person-outline'}
-          size={22}
+          size={20}
           color={color('Profile')}
         />
       </Tab>
-
     </View>
   );
 }
@@ -135,11 +124,12 @@ export default function BottomNavigation({
 const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
-    height: 65,
+    height: 72,
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
+    width: '92%',
+    alignSelf: 'center',
     marginBottom: 20,
-    borderRadius: 24,
+    borderRadius: 28,
     alignItems: 'center',
     paddingHorizontal: 8,
     overflow: 'visible',
@@ -157,49 +147,34 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  iconSlot: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-  },
-
-  activeCircle: {
-    position: 'absolute',
-    top: -42,
-    left: -17,
-    width: 56,
+  tabContent: {
+    width: 76,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: '#21479B',
-    borderWidth: 6,
-    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 6,
   },
 
-  crownIcon: {
-    width: 22,
-    height: 22,
+  // Bloco azul da aba ativa, com ícone e nome dentro
+  activePill: {
+    width: 76,
+    height: 56,
+    borderRadius: 22,
+    backgroundColor: '#21479B',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   tabText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#64748B',
-    marginTop: 4,
-    fontWeight: '500',
+    marginTop: 3,
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
 
   activeTabText: {
-    fontSize: 10,
-    color: '#0F172A',
-    marginTop: 4,
-    fontWeight: '700',
+    fontSize: 11,
+    color: '#FFFFFF',
+    marginTop: 3,
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
 });

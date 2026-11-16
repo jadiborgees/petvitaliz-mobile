@@ -41,7 +41,7 @@ export default function HomeScreen({
 }: HomeScreenProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const totalBanners = 2;
+  const totalBanners = 4;
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
@@ -117,13 +117,25 @@ export default function HomeScreen({
             }}
           >
             <Image
-              source={require('../../assets/banner.png')}
+              source={require('../../assets/Plano-Bronze.png')}
               style={styles.bannerImage}
               resizeMode="cover"
             />
 
             <Image
-              source={require('../../assets/banner2.png')}
+              source={require('../../assets/Plano-Prata.png')}
+              style={styles.bannerImage}
+              resizeMode="cover"
+            />
+
+            <Image
+              source={require('../../assets/Plano-Ouro.png')}
+              style={styles.bannerImage}
+              resizeMode="cover"
+            />
+
+            <Image
+              source={require('../../assets/Plano-Diamante.png')}
               style={styles.bannerImage}
               resizeMode="cover"
             />

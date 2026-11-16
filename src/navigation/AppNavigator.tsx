@@ -40,11 +40,7 @@ import PrivatePersonalDataScreen from '../screens/private/PrivatePersonalDataScr
 import PrivatePaymentMethodsScreen from '../screens/private/PrivatePaymentMethodsScreen';
 import PrivatePetsFlowScreen from '../screens/private/PrivatePetsFlowScreen';
 import type { Pet } from '../screens/private/PrivatePetsFlowScreen';
-
-import PrivateConsultationsScreen, {
-  type ConsultationAppointment,
-} from '../screens/private/PrivateConsultationsScreen';
-
+import PrivateConsultationsScreen from '../screens/private/PrivateConsultationsScreen';
 import PrivateNotificationsScreen from '../screens/private/PrivateNotificationsScreen';
 import PrivateSecurityScreen from '../screens/private/PrivateSecurityScreen';
 import PrivateHelpSupportScreen from '../screens/private/PrivateHelpSupportScreen';
@@ -53,7 +49,6 @@ import PrivateHelpSupportScreen from '../screens/private/PrivateHelpSupportScree
 type Screen =
   | 'Splash'
   | 'Home'
-  | 'Explore'
   | 'Plans'
   | 'Benefits'
   | 'Profile'
@@ -124,13 +119,9 @@ export default function AppNavigator() {
   // Lista compartilhada de pets
   const [userPets, setUserPets] = useState<Pet[]>([]);
 
-  // Assinatura contratada
+  // Dados da contratação
   const [planSubscription, setPlanSubscription] =
     useState<PlanSubscription | null>(null);
-
-  // Agendamentos compartilhados entre as telas
-  const [consultationAppointments, setConsultationAppointments] =
-    useState<ConsultationAppointment[]>([]);
 
   // Faturas
   const [invoices] = useState<Invoice[]>([]);
@@ -184,7 +175,6 @@ export default function AppNavigator() {
   // Navegação pública
   const tabs = {
     onNavigateToHome: () => reset('Home'),
-    onNavigateToExplore: () => reset('Explore'),
     onNavigateToPlans: () => reset('Plans'),
     onNavigateToBenefits: () => reset('Benefits'),
     onNavigateToProfile: () => reset('Profile'),
@@ -200,14 +190,12 @@ export default function AppNavigator() {
     },
 
     onNavigateToMyPlan: () => reset('PrivateMyPlan'),
-
     onNavigateToBenefits: () => reset('PrivateBenefits'),
     onNavigateToProfile: () => reset('PrivateProfile'),
   };
 
   const renderScreen = () => {
     switch (currentScreen) {
-      // Splash
       case 'Splash':
         return (
           <SplashScreen
@@ -224,14 +212,6 @@ export default function AppNavigator() {
             onNavigateToRegister={() => push('Register')}
             onNavigateToServices={() => push('Services')}
             onNavigateToHowItWorks={() => push('HowItWorks')}
-          />
-        );
-
-      case 'Explore':
-        return (
-          <ExploreScreen
-            {...tabs}
-            onBack={() => reset('Home')}
           />
         );
 
@@ -274,7 +254,6 @@ export default function AppNavigator() {
           <ServicesScreen
             onBack={back}
             onNavigateToPlans={() => reset('Plans')}
-            onNavigateToExplore={() => reset('Explore')}
             onNavigateToLogin={() => push('Login')}
           />
         );
@@ -373,8 +352,17 @@ export default function AppNavigator() {
           <PrivateHomeScreen
             {...privateTabs}
             onNavigateToServices={() => push('PrivateServices')}
+            onNavigateToSupport={() => push('PrivateHelpSupport')}
+            onNavigateToPets={() => push('PrivatePetsFlow')}
+            onNavigateToConsultations={() => push('PrivateConsultations')}
+            onNavigateToPersonalData={() => push('PrivatePersonalData')}
+            onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
+            onNavigateToNotifications={() => push('PrivateNotifications')}
+            onNavigateToSecurity={() => push('PrivateSecurity')}
+            onLogout={() => reset('Home')}
             profileImage={profileImage}
             userName={userName}
+            userEmail={userEmail}
           />
         );
 
@@ -417,6 +405,20 @@ export default function AppNavigator() {
             pets={userPets}
             onPurchaseComplete={(subscription) => {
               setPlanSubscription(subscription);
+
+              if (subscription.status === 'paid') {
+                setUserPets((previousPets) =>
+                  previousPets.map((pet) =>
+                    pet.id === subscription.petId
+                      ? {
+                          ...pet,
+                          plan: subscription.planName,
+                          hasActivePlan: true,
+                        }
+                      : pet,
+                  ),
+                );
+              }
             }}
             onNavigateToAddPet={() => push('PrivatePetsFlow')}
             onNavigateToMyPlan={() => reset('PrivateMyPlan')}
@@ -520,7 +522,6 @@ export default function AppNavigator() {
           />
         );
 
-      // Meus Pets
       case 'PrivatePetsFlow':
         return (
           <PrivatePetsFlowScreen
@@ -531,16 +532,11 @@ export default function AppNavigator() {
           />
         );
 
-      // Consultas
       case 'PrivateConsultations':
         return (
           <PrivateConsultationsScreen
             {...privateTabs}
             onBack={back}
-            pets={userPets}
-            subscription={planSubscription}
-            appointments={consultationAppointments}
-            onAppointmentsChange={setConsultationAppointments}
           />
         );
 
