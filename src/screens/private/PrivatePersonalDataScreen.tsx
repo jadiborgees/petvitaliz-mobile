@@ -4,18 +4,20 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  StatusBar,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Image,
-  Platform,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import PrivateBottomNav from '../../components/PrivateBottomNav';
+import PrivateHeader from '../../components/PrivateHeader';
+import Toast from '../../components/Toast';
+import { theme } from '../../theme/privateTheme';
 
 interface PrivatePersonalDataScreenProps {
   onBack?: () => void;
@@ -34,14 +36,52 @@ interface PrivatePersonalDataScreenProps {
   setUserPhone: (phone: string) => void;
   userCpf: string;
   setUserCpf: (cpf: string) => void;
+  userBirthDate?: string;
+  setUserBirthDate?: (date: string) => void;
 }
+
+const C = theme.colors;
+const F = theme.fonts;
+
+// Máscaras: só números, com a pontuação colocada automaticamente.
+const maskDate = (text: string) => {
+  const d = text.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+};
+
+const maskPhone = (text: string) => {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : '';
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+
+const maskCpf = (text: string) => {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+};
+
+const isValidDate = (value: string) => {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return false;
+  const [, dd, mm, yyyy] = match.map(Number) as unknown as [number, number, number, number];
+  const date = new Date(yyyy, mm - 1, dd);
+  return (
+    date.getFullYear() === yyyy &&
+    date.getMonth() === mm - 1 &&
+    date.getDate() === dd &&
+    date <= new Date() &&
+    yyyy > 1900
+  );
+};
 
 export default function PrivatePersonalDataScreen({
   onBack,
-  onNavigateToHome,
-  onNavigateToExplore,
-  onNavigateToPlans,
-  onNavigateToBenefits,
   onNavigateToProfile,
   profileImage,
   setProfileImage,
@@ -53,331 +93,290 @@ export default function PrivatePersonalDataScreen({
   setUserPhone,
   userCpf,
   setUserCpf,
+  userBirthDate = '',
+  setUserBirthDate,
 }: PrivatePersonalDataScreenProps) {
-  // Estados locais para edição temporária antes de salvar
   const [name, setName] = useState(userName);
-  const [email, setEmail] = useState(userEmail);
+  const [birthDate, setBirthDate] = useState(userBirthDate);
   const [phone, setPhone] = useState(userPhone);
   const [cpf, setCpf] = useState(userCpf);
+  const cpfLocked = userCpf.replace(/\D/g, '').length === 11; // depois de salvo, não muda
+  const [toast, setToast] = useState('');
 
-  // Estados para o fluxo de alteração de e-mail por código
-  const [isEmailModalVisible, setIsEmailModalVisible] = useState(false);
-  const [tempNewEmail, setTempNewEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [stepCode, setStepCode] = useState<'request' | 'verify'>('request');
+  // Alteração de e-mail com código
+  const [emailModal, setEmailModal] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [emailStep, setEmailStep] = useState<'request' | 'verify'>('request');
 
-  // Função para escolher a foto de perfil
   const handlePickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      Alert.alert('Permissão negada', 'Precisamos de permissão para acessar sua galeria de fotos.');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria para trocar a foto.');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-
-    if (!result.canceled && result.assets[0].uri) {
+    if (!result.canceled && result.assets[0]?.uri) {
       setProfileImage(result.assets[0].uri);
+      setToast('Foto atualizada');
     }
   };
 
-  // Salvar alterações gerais
   const handleSave = () => {
-    setUserName(name);
+    if (!name.trim()) {
+      Alert.alert('Nome obrigatório', 'Informe seu nome completo.');
+      return;
+    }
+    if (birthDate && !isValidDate(birthDate)) {
+      Alert.alert('Data inválida', 'Confira a data de nascimento (dd/mm/aaaa).');
+      return;
+    }
+    if (phone && phone.replace(/\D/g, '').length < 10) {
+      Alert.alert('Telefone incompleto', 'Informe o telefone com DDD.');
+      return;
+    }
+    if (!cpfLocked && cpf && cpf.replace(/\D/g, '').length !== 11) {
+      Alert.alert('CPF incompleto', 'O CPF precisa ter 11 números.');
+      return;
+    }
+    setUserName(name.trim());
+    setUserBirthDate?.(birthDate);
     setUserPhone(phone);
-    setUserCpf(cpf);
-    Alert.alert('Sucesso', 'Dados pessoais atualizados com sucesso!');
+    if (!cpfLocked) setUserCpf(cpf);
+    setToast('Dados atualizados');
   };
 
-  // Solicitar código para alterar o e-mail
-  const handleRequestEmailChange = () => {
-    if (!tempNewEmail || tempNewEmail === userEmail) {
-      Alert.alert('Atenção', 'Digite um novo e-mail válido.');
+  const requestEmailChange = () => {
+    const email = newEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email) || email === userEmail) {
+      Alert.alert('E-mail inválido', 'Digite um novo e-mail válido.');
       return;
     }
-    // Simulação de envio de código para o e-mail original
-    Alert.alert('Código enviado', `Um código de confirmação foi enviado para o seu e-mail original (${userEmail}).`);
-    setStepCode('verify');
+    setEmailStep('verify');
   };
 
-  // Confirmar código e atualizar e-mail
-  const handleVerifyAndChangeEmail = () => {
-    if (verificationCode.length < 4) {
-      Alert.alert('Erro', 'Digite o código de verificação válido.');
+  const confirmEmailChange = () => {
+    if (code.replace(/\D/g, '').length !== 6) {
+      Alert.alert('Código incompleto', 'Digite o código de 6 números.');
       return;
     }
-    setUserEmail(tempNewEmail);
-    setEmail(tempNewEmail);
-    setIsEmailModalVisible(false);
-    setStepCode('request');
-    setVerificationCode('');
-    Alert.alert('Sucesso', 'E-mail alterado com sucesso!');
+    setUserEmail(newEmail.trim().toLowerCase());
+    closeEmailModal();
+    setToast('E-mail alterado');
   };
+
+  const closeEmailModal = () => {
+    setEmailModal(false);
+    setEmailStep('request');
+    setNewEmail('');
+    setCode('');
+  };
+
+  const initial = (name.trim()[0] || 'U').toUpperCase();
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <PrivateHeader title="Dados pessoais" onBack={onBack || onNavigateToProfile} />
 
-      {/* Cabeçalho */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack || onNavigateToProfile} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#21479B" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Dados Pessoais</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Foto de Perfil */}
-        <View style={styles.avatarSection}>
-          <TouchableOpacity activeOpacity={0.8} onPress={handlePickImage} style={styles.avatarContainer}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {/* Foto */}
+          <TouchableOpacity style={styles.avatarWrap} onPress={handlePickImage} activeOpacity={0.85}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              <Image source={{ uri: profileImage }} style={styles.avatar} />
             ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person-outline" size={48} color="#64748B" />
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initial}</Text>
               </View>
             )}
             <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={14} color="#FFFFFF" />
+              <Feather name="camera" size={13} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarLabel}>Foto de Perfil</Text>
-        </View>
+          <Text style={styles.photoHint}>Toque para trocar a foto</Text>
 
-        {/* Nome Completo */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Nome completo</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
+          <View style={styles.card}>
+            <Text style={styles.label}>Nome completo</Text>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Seu nome" placeholderTextColor="#9AA6B8" />
+
+            <Text style={styles.label}>E-mail</Text>
+            <View style={[styles.input, styles.inputRow]}>
+              <Text style={styles.inputText} numberOfLines={1}>{userEmail}</Text>
+              <TouchableOpacity onPress={() => setEmailModal(true)}>
+                <Text style={styles.link}>Alterar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Data de nascimento</Text>
             <TextInput
               style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Seu nome completo"
-              placeholderTextColor="#94A3B8"
+              value={birthDate}
+              onChangeText={(text) => setBirthDate(maskDate(text))}
+              placeholder="dd/mm/aaaa"
+              placeholderTextColor="#9AA6B8"
+              keyboardType="number-pad"
+              maxLength={10}
             />
-          </View>
-        </View>
 
-        {/* E-mail (Protegido por código) */}
-        <View style={styles.inputGroup}>
-          <View style={styles.emailHeaderRow}>
-            <Text style={styles.label}>E-mail</Text>
-            <TouchableOpacity onPress={() => setIsEmailModalVisible(true)}>
-              <Text style={styles.changeEmailLink}>Alterar e-mail</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.inputContainer, styles.disabledInputContainer]}>
-            <Ionicons name="mail-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, styles.disabledInput]}
-              value={email}
-              editable={false}
-              placeholderTextColor="#94A3B8"
-            />
-            <Ionicons name="lock-closed-outline" size={16} color="#94A3B8" />
-          </View>
-        </View>
-
-        {/* Telefone */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Telefone</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
+            <Text style={styles.label}>Telefone</Text>
             <TextInput
               style={styles.input}
               value={phone}
-              onChangeText={setPhone}
-              placeholder="(00) 00000-0000"
-              placeholderTextColor="#94A3B8"
+              onChangeText={(text) => setPhone(maskPhone(text))}
+              placeholder="(11) 98765-4321"
+              placeholderTextColor="#9AA6B8"
               keyboardType="phone-pad"
+              maxLength={15}
             />
+
+            <Text style={styles.label}>CPF</Text>
+            {cpfLocked ? (
+              <View style={[styles.input, styles.inputRow, styles.inputLocked]}>
+                <Text style={styles.inputText}>{userCpf}</Text>
+                <Feather name="lock" size={15} color={C.muted} />
+              </View>
+            ) : (
+              <TextInput
+                style={[styles.input, { marginBottom: 0 }]}
+                value={cpf}
+                onChangeText={(text) => setCpf(maskCpf(text))}
+                placeholder="000.000.000-00"
+                placeholderTextColor="#9AA6B8"
+                keyboardType="number-pad"
+                maxLength={14}
+              />
+            )}
+            <Text style={styles.hint}>
+              {cpfLocked ? 'Para mudar o CPF, fale com o suporte.' : 'Depois de salvo, o CPF não pode ser alterado.'}
+            </Text>
           </View>
-        </View>
 
-        {/* CPF Opcional */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>CPF <Text style={styles.optionalText}>(Opcional)</Text></Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="card-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              value={cpf}
-              onChangeText={setCpf}
-              placeholder="000.000.000-00"
-              placeholderTextColor="#94A3B8"
-              keyboardType="numeric"
-            />
-          </View>
-          <Text style={styles.helperText}>Você pode preencher ou deixar o CPF em branco.</Text>
-        </View>
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSave} activeOpacity={0.85}>
+            <Text style={styles.primaryButtonText}>Salvar alterações</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {/* Botão Salvar */}
-        <TouchableOpacity style={styles.primaryBtn} activeOpacity={0.85} onPress={handleSave}>
-          <Text style={styles.primaryBtnText}>Salvar</Text>
-        </TouchableOpacity>
-
-      </ScrollView>
-
-      {/* Modal de Alteração de E-mail via Código */}
-      <Modal visible={isEmailModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Alterar E-mail</Text>
-            {stepCode === 'request' ? (
+      {/* Alterar e-mail */}
+      <Modal visible={emailModal} transparent animationType="slide" onRequestClose={closeEmailModal}>
+        <View style={styles.sheetOverlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Alterar e-mail</Text>
+            {emailStep === 'request' ? (
               <>
-                <Text style={styles.modalSub}>
-                  Por segurança, enviaremos um código de confirmação para o seu e-mail atual ({userEmail}).
-                </Text>
+                <Text style={styles.sheetText}>Vamos enviar um código para {userEmail} para confirmar a troca.</Text>
                 <TextInput
-                  style={styles.modalInput}
-                  placeholder="Digite o novo e-mail"
-                  placeholderTextColor="#94A3B8"
-                  value={tempNewEmail}
-                  onChangeText={setTempNewEmail}
-                  autoCapitalize="none"
+                  style={styles.input}
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  placeholder="novo@email.com"
+                  placeholderTextColor="#9AA6B8"
                   keyboardType="email-address"
+                  autoCapitalize="none"
                 />
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleRequestEmailChange}>
-                  <Text style={styles.primaryBtnText}>Enviar Código</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={requestEmailChange}>
+                  <Text style={styles.primaryButtonText}>Enviar código</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.modalSub}>
-                  Digite o código de 4 dígitos enviado para {userEmail}.
-                </Text>
+                <Text style={styles.sheetText}>Digite o código de 6 números enviado para {userEmail}.</Text>
                 <TextInput
-                  style={styles.modalInput}
-                  placeholder="Código de verificação"
-                  placeholderTextColor="#94A3B8"
-                  value={verificationCode}
-                  onChangeText={setVerificationCode}
-                  keyboardType="numeric"
-                  maxLength={4}
+                  style={[styles.input, styles.codeInput]}
+                  value={code}
+                  onChangeText={(text) => setCode(text.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  placeholderTextColor="#9AA6B8"
+                  keyboardType="number-pad"
+                  maxLength={6}
                 />
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyAndChangeEmail}>
-                  <Text style={styles.primaryBtnText}>Confirmar e Alterar</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={confirmEmailChange}>
+                  <Text style={styles.primaryButtonText}>Confirmar</Text>
                 </TouchableOpacity>
               </>
             )}
-
-            <TouchableOpacity
-              style={styles.modalCancelBtn}
-              onPress={() => {
-                setIsEmailModalVisible(false);
-                setStepCode('request');
-                setTempNewEmail('');
-              }}
-            >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
+            <TouchableOpacity style={styles.textButton} onPress={closeEmailModal}>
+              <Text style={styles.link}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Navegação Inferior Privada */}
-      <PrivateBottomNav
-        currentRoute="PrivateProfile"
-        onNavigateToHome={onNavigateToHome}
-        onNavigateToExplore={onNavigateToExplore}
-        onNavigateToPlans={onNavigateToPlans}
-        onNavigateToBenefits={onNavigateToBenefits}
-        onNavigateToProfile={onNavigateToProfile}
-      />
+      <Toast message={toast} onHide={() => setToast('')} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#21479B' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 110 },
+  container: { flex: 1, backgroundColor: C.background },
+  scrollContent: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 60 },
 
-  avatarSection: { alignItems: 'center', marginBottom: 24 },
-  avatarContainer: { position: 'relative', width: 90, height: 90, borderRadius: 45 },
-  avatarPlaceholder: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#F1F5F9',
+  avatarWrap: { alignSelf: 'center' },
+  avatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: C.brandYellow,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
-  avatarImage: { width: 90, height: 90, borderRadius: 45 },
+  avatarText: { fontSize: 30, fontFamily: F.bold, color: C.navy },
   cameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#21479B',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: C.primary,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-  },
-  avatarLabel: { fontSize: 13, fontWeight: '600', color: '#64748B', marginTop: 8 },
-
-  inputGroup: { marginBottom: 16 },
-  emailHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  label: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  optionalText: { fontSize: 11, color: '#94A3B8', fontWeight: '400' },
-  changeEmailLink: { fontSize: 12, fontWeight: '700', color: '#21479B' },
-  
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-    marginTop: 6,
-  },
-  disabledInputContainer: { backgroundColor: '#F8FAFC' },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 13, color: '#0F172A', fontWeight: '500' },
-  disabledInput: { color: '#64748B' },
-  helperText: { fontSize: 11, color: '#94A3B8', marginTop: 4, marginLeft: 4 },
-
-  primaryBtn: {
-    backgroundColor: '#21479B',
-    height: 50,
-    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
-    width: '100%',
-    elevation: 2,
   },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  photoHint: { fontSize: 12, fontFamily: F.medium, color: C.muted, textAlign: 'center', marginTop: 8, marginBottom: 16 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340, alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 10 },
-  modalSub: { fontSize: 12, color: '#64748B', textAlign: 'center', marginBottom: 16, lineHeight: 18 },
-  modalInput: { width: '100%', height: 48, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 12, fontSize: 13, color: '#0F172A', marginBottom: 16 },
-  modalCancelBtn: { marginTop: 12, padding: 8 },
-  modalCancelText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, padding: 14 },
+  label: { fontSize: 13, fontFamily: F.bold, color: C.navy, marginBottom: 7 },
+  input: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontFamily: F.medium,
+    color: C.navy,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
+  },
+  inputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  inputText: { flex: 1, fontSize: 14, fontFamily: F.medium, color: C.navy },
+  inputLocked: { backgroundColor: C.background, marginBottom: 0 },
+  hint: { fontSize: 11, fontFamily: F.regular, color: C.muted, marginTop: 6 },
+  link: { fontSize: 13, fontFamily: F.bold, color: C.primary },
+
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: theme.radius.button,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: F.bold },
+  textButton: { alignItems: 'center', paddingVertical: 14 },
+
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 26 },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#D5DCE7', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { fontSize: 17, fontFamily: F.bold, color: C.navy },
+  sheetText: { fontSize: 13, fontFamily: F.regular, color: C.textSecondary, marginTop: 6, marginBottom: 14, lineHeight: 19 },
+  codeInput: { textAlign: 'center', fontSize: 20, letterSpacing: 6 },
 });

@@ -1,30 +1,17 @@
-
 import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  StatusBar,
   ScrollView,
   TouchableOpacity,
-  Platform,
   Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
-
-const COLORS = {
-  primary: '#21479B',
-  background: '#F7F9FC',
-  surface: '#FFFFFF',
-  text: '#17233F',
-  secondary: '#66758C',
-  muted: '#94A3B8',
-  border: '#E8EDF4',
-  danger: '#C73D3D',
-  dangerBackground: '#FFF5F5',
-};
+import PrivateHeader from '../../components/PrivateHeader';
+import { theme } from '../../theme/privateTheme';
 
 interface PrivateProfileScreenProps {
   onBack?: () => void;
@@ -40,19 +27,29 @@ interface PrivateProfileScreenProps {
   onNavigateToNotifications?: () => void;
   onNavigateToSecurity?: () => void;
   onNavigateToHelp?: () => void;
+  onNavigateToMyPlan?: () => void;
+  onNavigateToTerms?: () => void;
   onLogout?: () => void;
   userName?: string;
   userEmail?: string;
   profileImage?: string | null;
+  // Números dos atalhos
+  petsCount?: number;
+  upcomingCount?: number;
+  activePlans?: number;
 }
+
+const C = theme.colors;
+const F = theme.fonts;
+
+const plural = (n: number, one: string, many: string, zero: string) =>
+  n === 0 ? zero : n === 1 ? `1 ${one}` : `${n} ${many}`;
 
 export default function PrivateProfileScreen({
   onBack,
   onNavigateToHome,
-  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
-  onNavigateToProfile,
   onNavigateToPersonalData,
   onNavigateToPaymentMethods,
   onNavigateToPets,
@@ -60,360 +57,178 @@ export default function PrivateProfileScreen({
   onNavigateToNotifications,
   onNavigateToSecurity,
   onNavigateToHelp,
+  onNavigateToMyPlan,
+  onNavigateToTerms,
   onLogout,
-  userName,
-  userEmail,
+  userName = 'Usuário',
+  userEmail = '',
   profileImage,
+  petsCount = 0,
+  upcomingCount = 0,
+  activePlans = 0,
 }: PrivateProfileScreenProps) {
-  const displayName = userName?.trim() || 'Meu Perfil';
-  const displayEmail = userEmail?.trim() || '';
+  const initial = (userName.trim()[0] || 'U').toUpperCase();
 
-  const renderMenuItem = (
-    icon: keyof typeof Ionicons.glyphMap,
-    title: string,
-    onPress?: () => void,
-    isLast = false,
-  ) => (
-    <TouchableOpacity
-      key={title}
-      style={[
-        styles.menuRow,
-        !isLast && styles.menuRowBorder,
-      ]}
-      activeOpacity={0.65}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-    >
-      <Ionicons
-        name={icon}
-        size={20}
-        color={COLORS.primary}
-        style={styles.menuIcon}
-      />
+  const shortcuts = [
+    { key: 'pets', icon: 'paw' as const, title: 'Meus pets', note: plural(petsCount, 'pet', 'pets', 'Nenhum'), onPress: onNavigateToPets, gold: false },
+    { key: 'consultas', icon: 'calendar-blank-outline' as const, title: 'Consultas', note: plural(upcomingCount, 'próxima', 'próximas', 'Nenhuma marcada'), onPress: onNavigateToConsultations, gold: false },
+    { key: 'plano', icon: 'crown' as const, title: 'Meu plano', note: plural(activePlans, 'ativo', 'ativos', 'Nenhum ativo'), onPress: onNavigateToMyPlan ?? onNavigateToPlans, gold: true },
+  ];
 
-      <Text style={styles.menuText}>{title}</Text>
+  const accountItems = [
+    { icon: 'user' as const, title: 'Dados pessoais', onPress: onNavigateToPersonalData },
+    { icon: 'credit-card' as const, title: 'Formas de pagamento', onPress: onNavigateToPaymentMethods },
+    { icon: 'bell' as const, title: 'Notificações', onPress: onNavigateToNotifications },
+    { icon: 'shield' as const, title: 'Segurança', onPress: onNavigateToSecurity },
+  ];
 
-      <Ionicons
-        name="chevron-forward-outline"
-        size={16}
-        color={COLORS.muted}
-      />
-    </TouchableOpacity>
+  const helpItems = [
+    { icon: 'headphones' as const, title: 'Ajuda e suporte', onPress: onNavigateToHelp },
+    { icon: 'file-text' as const, title: 'Termos e privacidade', onPress: onNavigateToTerms },
+  ];
+
+  const renderList = (items: typeof accountItems | typeof helpItems) => (
+    <View style={styles.listCard}>
+      {items.map((item, index) => (
+        <TouchableOpacity
+          key={item.title}
+          style={[styles.row, index < items.length - 1 && styles.divider]}
+          onPress={item.onPress}
+          activeOpacity={0.75}
+        >
+          <Feather name={item.icon} size={18} color={C.primary} />
+          <Text style={styles.rowText}>{item.title}</Text>
+          <Feather name="chevron-right" size={18} color="#9AA6B8" />
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
-      />
+      <PrivateHeader title="Meu perfil" onBack={onBack ?? onNavigateToHome} />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={onBack || onNavigateToHome}
-          activeOpacity={0.7}
-          accessibilityLabel="Voltar"
-        >
-          <Ionicons
-            name="arrow-back-outline"
-            size={22}
-            color={COLORS.text}
-          />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Meu perfil</Text>
-
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.profileCard}>
-          <View style={styles.avatarCircle}>
-            {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Ionicons
-                name="person-outline"
-                size={31}
-                color={COLORS.primary}
-              />
-            )}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Usuário */}
+        <View style={styles.userCard}>
+          <View style={styles.userCircle} />
+          {profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
+            <Text style={styles.userEmail} numberOfLines={1}>{userEmail || 'E-mail não informado'}</Text>
           </View>
-
-          <View style={styles.profileDetails}>
-            <Text style={styles.userName}>
-              {displayName}
-            </Text>
-
-            {!!displayEmail && (
-              <Text style={styles.userEmail}>
-                {displayEmail}
-              </Text>
-            )}
-
-            <Text style={styles.accountCaption}>
-              Informações da sua conta
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.editButton} onPress={onNavigateToPersonalData} activeOpacity={0.8}>
+            <Text style={styles.editText}>Editar</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionLabel}>CONTA</Text>
-
-        <View style={styles.cardGroup}>
-          {renderMenuItem(
-            'person-outline',
-            'Dados pessoais',
-            onNavigateToPersonalData,
-          )}
-          {renderMenuItem(
-            'card-outline',
-            'Formas de pagamento',
-            onNavigateToPaymentMethods,
-            true,
-          )}
+        {/* Atalhos */}
+        <View style={styles.shortcuts}>
+          {shortcuts.map((item) => (
+            <TouchableOpacity key={item.key} style={styles.shortcut} onPress={item.onPress} activeOpacity={0.8}>
+              <View style={[styles.shortcutIcon, item.gold && { backgroundColor: '#E3A912' }]}>
+                <MaterialCommunityIcons name={item.icon} size={19} color={item.gold ? '#FFFFFF' : C.primary} />
+              </View>
+              <Text style={styles.shortcutTitle}>{item.title}</Text>
+              <Text style={styles.shortcutNote}>{item.note}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        <Text style={styles.sectionLabel}>
-          PETS E CONSULTAS
-        </Text>
+        <Text style={styles.sectionTitle}>Conta e preferências</Text>
+        {renderList(accountItems)}
 
-        <View style={styles.cardGroup}>
-          {renderMenuItem(
-            'paw-outline',
-            'Meus pets',
-            onNavigateToPets,
-          )}
-          {renderMenuItem(
-            'calendar-clear-outline',
-            'Minhas consultas',
-            onNavigateToConsultations,
-            true,
-          )}
-        </View>
+        <Text style={styles.sectionTitle}>Ajuda</Text>
+        {renderList(helpItems)}
 
-        <Text style={styles.sectionLabel}>
-          PREFERÊNCIAS
-        </Text>
-
-        <View style={styles.cardGroup}>
-          {renderMenuItem(
-            'notifications-outline',
-            'Notificações',
-            onNavigateToNotifications,
-          )}
-          {renderMenuItem(
-            'shield-checkmark-outline',
-            'Segurança',
-            onNavigateToSecurity,
-          )}
-          {renderMenuItem(
-            'headset-outline',
-            'Ajuda e suporte',
-            onNavigateToHelp,
-            true,
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          activeOpacity={0.75}
-          onPress={onLogout}
-          accessibilityRole="button"
-        >
-          <Ionicons
-            name="log-out-outline"
-            size={19}
-            color={COLORS.danger}
-          />
-
-          <Text style={styles.logoutText}>
-            Sair da conta
-          </Text>
+        <TouchableOpacity style={styles.logout} onPress={onLogout} activeOpacity={0.7}>
+          <Feather name="log-out" size={17} color={C.danger} />
+          <Text style={styles.logoutText}>Sair da conta</Text>
         </TouchableOpacity>
-
-        <Text style={styles.footerText}>
-          PetVitaliz · Sua saúde, nosso cuidado.
-        </Text>
       </ScrollView>
 
       <PrivateBottomNav
         currentRoute="PrivateProfile"
         onNavigateToHome={onNavigateToHome}
-        onNavigateToExplore={onNavigateToExplore}
         onNavigateToPlans={onNavigateToPlans}
         onNavigateToBenefits={onNavigateToBenefits}
-        onNavigateToProfile={onNavigateToProfile}
+        onNavigateToProfile={() => {}}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  container: { flex: 1, backgroundColor: C.background },
+  scrollContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 140 },
 
-  header: {
+  userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop:
-      Platform.OS === 'android'
-        ? (StatusBar.currentHeight || 24) + 8
-        : 14,
-    paddingBottom: 16,
-    backgroundColor: COLORS.background,
-  },
-
-  backButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: -0.3,
-  },
-
-  headerSpacer: {
-    width: 36,
-  },
-
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 120,
-  },
-
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    gap: 12,
+    backgroundColor: C.primary,
     borderRadius: 20,
-    padding: 18,
-    marginBottom: 30,
-  },
-
-  avatarCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#EEF3FC',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 15,
     overflow: 'hidden',
   },
-
-  avatarImage: {
-    width: '100%',
-    height: '100%',
+  userCircle: {
+    position: 'absolute',
+    right: -40,
+    top: -40,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: '#2148AA',
   },
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: C.brandYellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 21, fontFamily: F.bold, color: C.navy },
+  userName: { fontSize: 17, fontFamily: F.bold, color: '#FFFFFF' },
+  userEmail: { fontSize: 12, fontFamily: F.regular, color: '#C9D6EE', marginTop: 2 },
+  editButton: { backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  editText: { fontSize: 12, fontFamily: F.bold, color: C.primary },
 
-  profileDetails: {
+  shortcuts: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  shortcut: {
     flex: 1,
-    marginLeft: 15,
-  },
-
-  userName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: -0.4,
-  },
-
-  userEmail: {
-    fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 4,
-  },
-
-  accountCaption: {
-    fontSize: 11,
-    color: COLORS.muted,
-    marginTop: 6,
-  },
-
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.15,
-    color: '#8C9CB4',
-    marginBottom: 11,
-    marginTop: 4,
-  },
-
-  cardGroup: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 17,
+    alignItems: 'center',
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 15,
-    marginBottom: 26,
-    overflow: 'hidden',
+    borderColor: C.border,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 59,
-  },
-
-  menuRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F3F8',
-  },
-
-  menuIcon: {
-    width: 30,
-    marginRight: 10,
-  },
-
-  menuText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.text,
-    letterSpacing: 0.05,
-  },
-
-  logoutButton: {
-    flexDirection: 'row',
+  shortcutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 9,
-    minHeight: 50,
-    backgroundColor: COLORS.dangerBackground,
-    borderRadius: 14,
-    marginTop: 1,
+    marginBottom: 7,
   },
+  shortcutTitle: { fontSize: 12, fontFamily: F.bold, color: C.navy, textAlign: 'center' },
+  shortcutNote: { fontSize: 10, fontFamily: F.regular, color: C.muted, marginTop: 2, textAlign: 'center' },
 
-  logoutText: {
-    color: COLORS.danger,
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  sectionTitle: { fontSize: 15, fontFamily: F.bold, color: C.navy, marginTop: 22, marginBottom: 9 },
+  listCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingHorizontal: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  divider: { borderBottomWidth: 1, borderBottomColor: C.divider },
+  rowText: { flex: 1, fontSize: 14, fontFamily: F.semibold, color: C.navy },
 
-  footerText: {
-    textAlign: 'center',
-    fontSize: 10,
-    color: COLORS.muted,
-    marginTop: 23,
-  },
+  logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 20, marginTop: 6 },
+  logoutText: { fontSize: 14, fontFamily: F.bold, color: C.danger },
 });

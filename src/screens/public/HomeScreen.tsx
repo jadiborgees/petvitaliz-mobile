@@ -1,1015 +1,233 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  StatusBar,
-  TouchableOpacity,
   ScrollView,
-  Platform,
+  TouchableOpacity,
   Image,
+  ImageBackground,
   Dimensions,
+  StatusBar,
+  Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { PLAN_TIER } from '../../components/PlanShowcaseList';
 import BottomNavigation from '../../components/BottomNavigation';
-
-const { width } = Dimensions.get('window');
-const BANNER_WIDTH = width - 40;
+import { theme } from '../../theme/privateTheme';
+import { SERVICES, PLAN_ORDER, PLAN_NAMES, getMonthlyPrice, type PlanId } from '../../data/planCoverage';
 
 interface HomeScreenProps {
-  isLoggedIn?: boolean;
-  onNavigateToLogin?: () => void;
-  onNavigateToRegister?: () => void;
-  onNavigateToForgotPassword?: () => void;
-  onNavigateToServices?: () => void;
-  onNavigateToHowItWorks?: () => void;
+  onNavigateToHome?: () => void;
   onNavigateToExplore?: () => void;
   onNavigateToPlans?: () => void;
   onNavigateToBenefits?: () => void;
   onNavigateToProfile?: () => void;
+  onNavigateToLogin?: () => void;
+  onNavigateToRegister?: () => void;
+  onNavigateToServices?: () => void;
+  onNavigateToSupport?: () => void;
+  onNavigateToHowItWorks?: () => void; // mantido por compatibilidade
+  onChoosePlan?: (planId: PlanId) => void;
+  onOpenPlans?: (planId?: PlanId) => void; // abre a vitrine com o plano aberto
 }
 
+const { width } = Dimensions.get('window');
+const BANNER_WIDTH = width - 36;
+const BANNER_GAP = 12;
+const SERVICE_WIDTH = width * 0.62;
+
+const BANNER_PLANS: PlanId[] = ['bronze', 'prata', 'ouro', 'diamante'];
+const BANNERS = [
+  require('../../assets/Plano-Bronze.png'),
+  require('../../assets/Plano-Prata.png'),
+  require('../../assets/Plano-Ouro.png'),
+  require('../../assets/Plano-Diamante.png'),
+];
+
+const C = theme.colors;
+const F = theme.fonts;
+
 export default function HomeScreen({
-  isLoggedIn = false,
   onNavigateToPlans,
-  onNavigateToServices,
-  onNavigateToExplore,
   onNavigateToBenefits,
   onNavigateToProfile,
+  onNavigateToLogin,
+  onNavigateToRegister,
+  onNavigateToServices,
+  onNavigateToSupport,
+  onChoosePlan,
+  onOpenPlans,
 }: HomeScreenProps) {
-  const scrollRef = useRef<ScrollView>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const totalBanners = 4;
+  const bannerRef = useRef<ScrollView>(null);
+  const [bannerIndex, setBannerIndex] = useState(0);
 
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-
-  // Carrossel automático de banners
+  // Troca de banner sozinha a cada 5 segundos.
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentIndex((prevIndex) => {
-        const nextIndex = (prevIndex + 1) % totalBanners;
-
-        scrollRef.current?.scrollTo({
-          x: nextIndex * (BANNER_WIDTH + 16),
-          animated: true,
-        });
-
-        return nextIndex;
+      setBannerIndex((current) => {
+        const next = (current + 1) % BANNERS.length;
+        bannerRef.current?.scrollTo({ x: next * (BANNER_WIDTH + BANNER_GAP), animated: true });
+        return next;
       });
-    }, 3000);
-
+    }, 5000);
     return () => clearInterval(timer);
   }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greetingText}>
-              {isLoggedIn
-                ? 'Bem-vindo de volta,'
-                : 'Olá! Bem vindo(a) a PetVitaliz,'}
-            </Text>
-
-            <Text style={styles.mainTitle}>
-              {isLoggedIn
-                ? 'Aqui estão os seus pets e planos'
-                : 'O que você procura hoje?'}
-            </Text>
+      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Topo */}
+        <View style={styles.top}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hello}>Olá! Bem-vindo(a)</Text>
+            <Text style={styles.question}>O que você procura hoje?</Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.notificationButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={22}
-              color="#1E293B"
-            />
+          <TouchableOpacity style={styles.loginButton} onPress={onNavigateToLogin} activeOpacity={0.85}>
+            <Text style={styles.loginText}>Entrar</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Carrossel de banners */}
-        <View style={styles.bannerWrapper}>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.bannerContainer}
-            onMomentumScrollEnd={(event) => {
-              const contentOffset = event.nativeEvent.contentOffset.x;
-              const index = Math.round(
-                contentOffset / (BANNER_WIDTH + 16)
-              );
-
-              setCurrentIndex(index);
-            }}
-          >
-            <Image
-              source={require('../../assets/Plano-Bronze.png')}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-
-            <Image
-              source={require('../../assets/Plano-Prata.png')}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-
-            <Image
-              source={require('../../assets/Plano-Ouro.png')}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-
-            <Image
-              source={require('../../assets/Plano-Diamante.png')}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-          </ScrollView>
-
-          <View style={styles.paginationDots}>
-            {[...Array(totalBanners)].map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  currentIndex === i
-                    ? styles.activeDot
-                    : styles.inactiveDot,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* 1. Nossos Planos */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Nossos Planos</Text>
-
-          <TouchableOpacity
-            onPress={onNavigateToPlans}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.seeMoreText}>Ver mais</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* Banners clicáveis */}
         <ScrollView
+          ref={bannerRef}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalScroll}
+          snapToInterval={BANNER_WIDTH + BANNER_GAP}
+          decelerationRate="fast"
+          contentContainerStyle={styles.bannerRow}
+          onMomentumScrollEnd={(e) =>
+            setBannerIndex(Math.round(e.nativeEvent.contentOffset.x / (BANNER_WIDTH + BANNER_GAP)))
+          }
         >
-          {/* Plano Bronze */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() =>
-              setSelectedPlanId(
-                selectedPlanId === 'bronze' ? null : 'bronze'
-              )
-            }
-            style={[
-              styles.planCard,
-              selectedPlanId === 'bronze'
-                ? styles.activePlanCard
-                : styles.basicPlanCard,
-            ]}
-          >
-            <Text
-              style={
-                selectedPlanId === 'bronze'
-                  ? styles.planTag
-                  : styles.planTagBasic
-              }
-            >
-              ESSENCIAL
-            </Text>
-
-            <View style={styles.planHeaderRow}>
-              <View style={styles.planTitleContainer}>
-                <View
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.planIconCircleGold
-                      : styles.planIconCircleBasic
-                  }
-                >
-                  <Image
-                    source={require('../../assets/coroa_outline.png')}
-                    style={[
-                      styles.crownIcon,
-                      {
-                        tintColor:
-                          selectedPlanId === 'bronze'
-                            ? '#FFFFFF'
-                            : '#21479B',
-                      },
-                    ]}
-                    resizeMode="contain"
-                  />
-                </View>
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.planTitleGold
-                      : styles.planTitleBasic
-                  }
-                >
-                  Bronze
-                </Text>
-              </View>
-
-              <View style={styles.planPriceContainer}>
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.planPriceGold
-                      : styles.planPriceBasic
-                  }
-                >
-                  R$ 139,90
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.planPeriodGold
-                      : styles.planPeriodBasic
-                  }
-                >
-                  /mês
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'bronze'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Banho mensal
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  1/mês
-                </Text>
-              </View>
-
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'bronze'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Vacinação digital
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'bronze'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  Incluso
-                </Text>
-              </View>
-            </View>
-
+          {BANNERS.map((banner, index) => (
             <TouchableOpacity
-              style={
-                selectedPlanId === 'bronze'
-                  ? styles.btnVerMaisGold
-                  : styles.btnVerMaisBasic
-              }
-              onPress={onNavigateToPlans}
-              activeOpacity={0.85}
+              key={BANNER_PLANS[index]}
+              activeOpacity={0.92}
+              onPress={() => (onChoosePlan ? onChoosePlan(BANNER_PLANS[index]) : onNavigateToPlans?.())}
             >
-              <Text
-                style={
-                  selectedPlanId === 'bronze'
-                    ? styles.btnVerMaisGoldText
-                    : styles.btnVerMaisBasicText
-                }
-              >
-                VER MAIS
-              </Text>
+              <Image source={banner} style={styles.banner} resizeMode="cover" />
             </TouchableOpacity>
-          </TouchableOpacity>
-
-          {/* Plano Prata */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() =>
-              setSelectedPlanId(
-                selectedPlanId === 'prata' ? null : 'prata'
-              )
-            }
-            style={[
-              styles.planCard,
-              selectedPlanId === 'prata'
-                ? styles.activePlanCard
-                : styles.basicPlanCard,
-            ]}
-          >
-            <Text
-              style={
-                selectedPlanId === 'prata'
-                  ? styles.planTag
-                  : styles.planTagBasic
-              }
-            >
-              POPULAR
-            </Text>
-
-            <View style={styles.planHeaderRow}>
-              <View style={styles.planTitleContainer}>
-                <View
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.planIconCircleGold
-                      : styles.planIconCircleBasic
-                  }
-                >
-                  <Image
-                    source={require('../../assets/coroa_outline.png')}
-                    style={[
-                      styles.crownIcon,
-                      {
-                        tintColor:
-                          selectedPlanId === 'prata'
-                            ? '#FFFFFF'
-                            : '#21479B',
-                      },
-                    ]}
-                    resizeMode="contain"
-                  />
-                </View>
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.planTitleGold
-                      : styles.planTitleBasic
-                  }
-                >
-                  Prata
-                </Text>
-              </View>
-
-              <View style={styles.planPriceContainer}>
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.planPriceGold
-                      : styles.planPriceBasic
-                  }
-                >
-                  R$ 219,90
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.planPeriodGold
-                      : styles.planPeriodBasic
-                  }
-                >
-                  /mês
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'prata'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Banho e Tosa
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  2/mês
-                </Text>
-              </View>
-
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'prata'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Consulta Veterinária
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'prata'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  1/mês
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={
-                selectedPlanId === 'prata'
-                  ? styles.btnVerMaisGold
-                  : styles.btnVerMaisBasic
-              }
-              onPress={onNavigateToPlans}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={
-                  selectedPlanId === 'prata'
-                    ? styles.btnVerMaisGoldText
-                    : styles.btnVerMaisBasicText
-                }
-              >
-                VER MAIS
-              </Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-
-          {/* Plano Ouro */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() =>
-              setSelectedPlanId(
-                selectedPlanId === 'ouro' ? null : 'ouro'
-              )
-            }
-            style={[
-              styles.planCard,
-              selectedPlanId === 'ouro'
-                ? styles.activePlanCard
-                : styles.basicPlanCard,
-            ]}
-          >
-            <View
-              style={
-                selectedPlanId === 'ouro'
-                  ? styles.badgeRecommended
-                  : styles.badgeRecommendedBasic
-              }
-            >
-              <Text style={styles.badgeText}>RECOMENDADO</Text>
-            </View>
-
-            <Text
-              style={
-                selectedPlanId === 'ouro'
-                  ? styles.planTag
-                  : styles.planTagBasic
-              }
-            >
-              MAIS COMPLETO
-            </Text>
-
-            <View style={styles.planHeaderRow}>
-              <View style={styles.planTitleContainer}>
-                <View
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.planIconCircleGold
-                      : styles.planIconCircleBasic
-                  }
-                >
-                  <Image
-                    source={require('../../assets/coroa_outline.png')}
-                    style={[
-                      styles.crownIcon,
-                      {
-                        tintColor:
-                          selectedPlanId === 'ouro'
-                            ? '#FFFFFF'
-                            : '#21479B',
-                      },
-                    ]}
-                    resizeMode="contain"
-                  />
-                </View>
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.planTitleGold
-                      : styles.planTitleBasic
-                  }
-                >
-                  Ouro
-                </Text>
-              </View>
-
-              <View style={styles.planPriceContainer}>
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.planPriceGold
-                      : styles.planPriceBasic
-                  }
-                >
-                  R$ 399,90
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.planPeriodGold
-                      : styles.planPeriodBasic
-                  }
-                >
-                  /mês
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'ouro'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Banho e Tosa
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  4/mês
-                </Text>
-              </View>
-
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'ouro'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Exames de rotina
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'ouro'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  2/mês
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={
-                selectedPlanId === 'ouro'
-                  ? styles.btnVerMaisGold
-                  : styles.btnVerMaisBasic
-              }
-              onPress={onNavigateToPlans}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={
-                  selectedPlanId === 'ouro'
-                    ? styles.btnVerMaisGoldText
-                    : styles.btnVerMaisBasicText
-                }
-              >
-                VER MAIS
-              </Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-
-          {/* Plano Diamante */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() =>
-              setSelectedPlanId(
-                selectedPlanId === 'diamante' ? null : 'diamante'
-              )
-            }
-            style={[
-              styles.planCard,
-              selectedPlanId === 'diamante'
-                ? styles.activePlanCard
-                : styles.basicPlanCard,
-            ]}
-          >
-            <Text
-              style={
-                selectedPlanId === 'diamante'
-                  ? styles.planTag
-                  : styles.planTagBasic
-              }
-            >
-              VIP PREMIUM
-            </Text>
-
-            <View style={styles.planHeaderRow}>
-              <View style={styles.planTitleContainer}>
-                <View
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.planIconCircleGold
-                      : styles.planIconCircleBasic
-                  }
-                >
-                  <Image
-                    source={require('../../assets/coroa_outline.png')}
-                    style={[
-                      styles.crownIcon,
-                      {
-                        tintColor:
-                          selectedPlanId === 'diamante'
-                            ? '#FFFFFF'
-                            : '#21479B',
-                      },
-                    ]}
-                    resizeMode="contain"
-                  />
-                </View>
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.planTitleGold
-                      : styles.planTitleBasic
-                  }
-                >
-                  Diamante
-                </Text>
-              </View>
-
-              <View style={styles.planPriceContainer}>
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.planPriceGold
-                      : styles.planPriceBasic
-                  }
-                >
-                  R$ 649,90
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.planPeriodGold
-                      : styles.planPeriodBasic
-                  }
-                >
-                  /mês
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'diamante'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Atendimento VIP
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  Ilimitado
-                </Text>
-              </View>
-
-              <View style={styles.featureItem}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={
-                    selectedPlanId === 'diamante'
-                      ? '#A3C0F5'
-                      : '#10B981'
-                  }
-                />
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.featureTextGold
-                      : styles.featureTextBasic
-                  }
-                >
-                  Exames e Vacinas
-                </Text>
-
-                <Text
-                  style={
-                    selectedPlanId === 'diamante'
-                      ? styles.featureCountGold
-                      : styles.featureCountBasic
-                  }
-                >
-                  Completos
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={
-                selectedPlanId === 'diamante'
-                  ? styles.btnVerMaisGold
-                  : styles.btnVerMaisBasic
-              }
-              onPress={onNavigateToPlans}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={
-                  selectedPlanId === 'diamante'
-                    ? styles.btnVerMaisGoldText
-                    : styles.btnVerMaisBasicText
-                }
-              >
-                VER MAIS
-              </Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
+          ))}
         </ScrollView>
-
-        {/* 2. Nossos Serviços */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Nossos Serviços</Text>
-
-          <TouchableOpacity
-            onPress={onNavigateToServices}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.seeMoreText}>Ver mais</Text>
-          </TouchableOpacity>
+        <View style={styles.dots}>
+          {BANNERS.map((_, i) => (
+            <View key={i} style={[styles.dot, bannerIndex === i && styles.dotActive]} />
+          ))}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalScroll}
-        >
-          <TouchableOpacity
-            style={styles.serviceItem}
-            onPress={onNavigateToServices}
-            activeOpacity={0.85}
-          >
-            <View
-              style={[
-                styles.serviceCircle,
-                { backgroundColor: '#80D8B6' },
-              ]}
-            >
-              <Ionicons name="cut-outline" size={24} color="#FFFFFF" />
+        {/* Vantagens (rodapé dos banners) */}
+        <View style={styles.perks}>
+          {[
+            { icon: 'clock-check-outline' as const, text: 'Sem carência' },
+            { icon: 'hospital-building' as const, text: 'Rede ampla' },
+            { icon: 'hours-24' as const, text: 'Atendimento 24h' },
+          ].map((perk) => (
+            <View key={perk.text} style={styles.perk}>
+              <MaterialCommunityIcons name={perk.icon} size={20} color={C.primary} />
+              <Text style={styles.perkText}>{perk.text}</Text>
             </View>
-
-            <Text style={styles.serviceLabel}>Banho e Tosa</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.serviceItem}
-            onPress={onNavigateToServices}
-            activeOpacity={0.85}
-          >
-            <View
-              style={[
-                styles.serviceCircle,
-                { backgroundColor: '#7FB3E8' },
-              ]}
-            >
-              <Ionicons name="flask-outline" size={24} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.serviceLabel}>Exames</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.serviceItem}
-            onPress={onNavigateToServices}
-            activeOpacity={0.85}
-          >
-            <View
-              style={[
-                styles.serviceCircle,
-                { backgroundColor: '#F0937A' },
-              ]}
-            >
-              <Ionicons name="medical-outline" size={24} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.serviceLabel}>Vacinação</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.serviceItem}
-            onPress={onNavigateToServices}
-            activeOpacity={0.85}
-          >
-            <View
-              style={[
-                styles.serviceCircle,
-                { backgroundColor: '#E88DA3' },
-              ]}
-            >
-              <Ionicons name="time-outline" size={24} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.serviceLabel}>Emergência 24h</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.serviceItem}
-            onPress={onNavigateToServices}
-            activeOpacity={0.85}
-          >
-            <View
-              style={[
-                styles.serviceCircle,
-                { backgroundColor: '#EBE3AA' },
-              ]}
-            >
-              <Ionicons
-                name="car-sport-outline"
-                size={24}
-                color="#21479B"
-              />
-            </View>
-
-            <Text style={styles.serviceLabel}>Leva & Traz Pet</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {/* 3. Ficou com Dúvida? */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ficou com Dúvida?</Text>
+          ))}
         </View>
 
-        <TouchableOpacity
-          style={styles.supportCard}
-          onPress={onNavigateToBenefits}
-          activeOpacity={0.8}
-        >
-          <View style={styles.supportIconBadge}>
-            <Ionicons
-              name="headset-outline"
-              size={20}
-              color="#21479B"
-            />
+        {/* Planos em resumo */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitleInline}>Nossos planos</Text>
+          <TouchableOpacity onPress={() => (onOpenPlans ? onOpenPlans() : onNavigateToPlans?.())}>
+            <Text style={styles.link}>Comparar</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.planRow}>
+          {PLAN_ORDER.map((id) => (
+            <TouchableOpacity
+              key={id}
+              style={[styles.planCard, id === 'ouro' && styles.planCardFeatured]}
+              onPress={() => (onOpenPlans ? onOpenPlans(id) : onNavigateToPlans?.())}
+              activeOpacity={0.85}
+            >
+              {id === 'ouro' && (
+                <View style={styles.planRibbon}>
+                  <Text style={styles.planRibbonText}>Mais escolhido</Text>
+                </View>
+              )}
+              <View style={[styles.planCrown, { backgroundColor: PLAN_TIER[id].color }]}>
+                <MaterialCommunityIcons name="crown" size={17} color="#FFFFFF" />
+              </View>
+              <Text style={styles.planName}>{PLAN_NAMES[id].replace('Plano ', '')}</Text>
+              <Text style={styles.planFrom}>a partir de</Text>
+              <Text style={styles.planPrice}>
+                {getMonthlyPrice(id, 'yearly').toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Chamada para criar conta */}
+        <Text style={styles.sectionTitle}>Comece por aqui</Text>
+        <TouchableOpacity style={styles.hero} activeOpacity={0.92} onPress={onNavigateToRegister}>
+          <View style={styles.heroCircleBig} />
+          <View style={styles.heroCircle} />
+          <Image source={require('../../assets/pets-abraco.png')} style={styles.heroImage} resizeMode="contain" />
+          <View style={styles.heroText}>
+            <Text style={styles.heroEyebrow}>Primeiro passo</Text>
+            <Text style={styles.heroTitle}>Crie sua conta e cadastre seu pet</Text>
+            <Text style={styles.heroSubtitle}>É grátis e leva 1 minuto.</Text>
+            <View style={styles.heroButton}>
+              <Text style={styles.heroButtonText}>Criar conta</Text>
+            </View>
           </View>
+        </TouchableOpacity>
 
-          <View style={styles.supportInfo}>
-            <Text style={styles.supportTitle}>
-              Falar com nossa equipe
-            </Text>
+        {/* Serviços */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitleInline}>Serviços</Text>
+          <TouchableOpacity onPress={onNavigateToPlans}>
+            <Text style={styles.link}>Ver planos</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceRow}>
+          {SERVICES.map((service) => {
+            const content = (
+              <View style={styles.serviceOverlay}>
+                <Text style={styles.serviceTitle}>{service.name}</Text>
+                <Text style={styles.serviceText} numberOfLines={2}>{service.description}</Text>
+              </View>
+            );
+            return (
+              <TouchableOpacity key={service.id} activeOpacity={0.9} onPress={onNavigateToServices ?? onNavigateToPlans}>
+                {service.image ? (
+                  <ImageBackground source={service.image} style={styles.serviceCard} imageStyle={styles.serviceImage}>
+                    {content}
+                  </ImageBackground>
+                ) : (
+                  <View style={[styles.serviceCard, styles.servicePlain]}>
+                    <Feather name="heart" size={40} color={C.primary} style={{ alignSelf: 'center', marginTop: 30 }} />
+                    {content}
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-            <Text style={styles.supportSubtitle}>
-              Atendimento por chat ou WhatsApp
-            </Text>
+        {/* Suporte */}
+        <TouchableOpacity style={styles.support} onPress={onNavigateToSupport ?? onNavigateToProfile} activeOpacity={0.85}>
+          <View style={styles.supportIcon}>
+            <Feather name="headphones" size={19} color={C.primary} />
           </View>
-
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color="#94A3B8"
-          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.supportTitle}>Falar com nossa equipe</Text>
+            <Text style={styles.supportText}>Atendimento por chat ou WhatsApp</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Navegação inferior */}
       <BottomNavigation
         currentRoute="Home"
+        onNavigateToHome={() => {}}
         onNavigateToPlans={onNavigateToPlans}
         onNavigateToBenefits={onNavigateToBenefits}
         onNavigateToProfile={onNavigateToProfile}
@@ -1019,366 +237,68 @@ export default function HomeScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: C.background },
+  scrollContent: { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 8, paddingBottom: 130 },
 
-  scrollContent: {
-    paddingBottom: 20,
-  },
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
+  hello: { fontSize: 13, fontFamily: F.regular, color: C.muted },
+  question: { fontSize: 19, fontFamily: F.bold, color: C.primary, marginTop: 2 },
+  loginButton: { backgroundColor: C.brandYellow, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 9 },
+  loginText: { fontSize: 13, fontFamily: F.bold, color: C.navy },
 
-  header: {
-    paddingTop:
-      Platform.OS === 'android'
-        ? (StatusBar.currentHeight || 24) + 8
-        : 12,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+  bannerRow: { paddingHorizontal: 18, gap: BANNER_GAP },
+  banner: { width: BANNER_WIDTH, height: BANNER_WIDTH / 2, borderRadius: 18 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 10 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#C9D3E3' },
+  dotActive: { width: 18, backgroundColor: C.primary },
+
+  perks: { flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 14 },
+  perk: { flex: 1, alignItems: 'center', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingVertical: 9, gap: 3 },
+  perkText: { fontSize: 11, fontFamily: F.bold, color: C.navy, textAlign: 'center' },
+  planRow: { paddingHorizontal: 18, gap: 10, paddingTop: 8 },
+  planCard: { width: 112, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, padding: 12 },
+  planCardFeatured: { borderColor: C.primary, borderWidth: 2 },
+  planRibbon: { position: 'absolute', top: -9, left: 10, backgroundColor: C.brandYellow, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  planRibbonText: { fontSize: 9, fontFamily: F.bold, color: C.navy },
+  planCrown: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  planName: { fontSize: 15, fontFamily: F.bold, color: C.navy, marginTop: 8 },
+  planFrom: { fontSize: 10, fontFamily: F.regular, color: C.muted, marginTop: 2 },
+  planPrice: { fontSize: 14, fontFamily: F.bold, color: C.primary },
+  sectionTitle: { fontSize: 17, fontFamily: F.bold, color: C.navy, marginHorizontal: 18, marginTop: 22, marginBottom: 12 },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginHorizontal: 18, marginTop: 24, marginBottom: 12 },
+  sectionTitleInline: { fontSize: 17, fontFamily: F.bold, color: C.navy },
+  link: { fontSize: 13, fontFamily: F.bold, color: C.primary },
+
+  hero: { marginHorizontal: 18, height: 172, borderRadius: 22, backgroundColor: C.primary, overflow: 'hidden' },
+  heroCircleBig: { position: 'absolute', right: -50, top: -40, width: 210, height: 210, borderRadius: 105, backgroundColor: '#2148AA' },
+  heroCircle: { position: 'absolute', right: -20, top: -10, width: 160, height: 160, borderRadius: 80, backgroundColor: '#2C55BC' },
+  heroImage: { position: 'absolute', right: 6, bottom: 8, width: 159, height: 134 },
+  heroText: { position: 'absolute', left: 18, top: 18, width: '52%' },
+  heroEyebrow: { fontSize: 12, fontFamily: F.medium, color: '#B9C8E6' },
+  heroTitle: { fontSize: 17, fontFamily: F.bold, color: '#FFFFFF', lineHeight: 22, marginTop: 4 },
+  heroSubtitle: { fontSize: 12, fontFamily: F.regular, color: '#C9D6EE', marginTop: 5 },
+  heroButton: { alignSelf: 'flex-start', backgroundColor: C.brandYellow, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9, marginTop: 12 },
+  heroButtonText: { fontSize: 13, fontFamily: F.bold, color: C.navy },
+
+  serviceRow: { paddingHorizontal: 18, gap: 12 },
+  serviceCard: { width: SERVICE_WIDTH, height: 150, borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end' },
+  serviceImage: { borderRadius: 18 },
+  servicePlain: { backgroundColor: C.primarySoft },
+  serviceOverlay: { backgroundColor: 'rgba(15, 23, 42, 0.5)', padding: 12 },
+  serviceTitle: { fontSize: 15, fontFamily: F.bold, color: '#FFFFFF' },
+  serviceText: { fontSize: 11, fontFamily: F.regular, color: '#E2E8F0', marginTop: 2 },
+
+  support: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  greetingText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '500',
-  },
-
-  mainTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#21479B',
-    marginTop: 2,
-  },
-
-  notificationButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-
-  bannerWrapper: {
-    marginBottom: 10,
-  },
-
-  bannerContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-
-  bannerImage: {
-    width: BANNER_WIDTH,
-    height: 180,
-    borderRadius: 20,
-  },
-
-  paginationDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 6,
-  },
-
-  dot: {
-    height: 6,
-    borderRadius: 3,
-  },
-
-  activeDot: {
-    width: 18,
-    backgroundColor: '#21479B',
-  },
-
-  inactiveDot: {
-    width: 6,
-    backgroundColor: '#CBD5E1',
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 18,
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1E293B',
-  },
-
-  seeMoreText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#21479B',
-  },
-
-  horizontalScroll: {
-    paddingHorizontal: 20,
     gap: 12,
-  },
-
-  planCard: {
-    width: 250,
-    borderRadius: 20,
-    padding: 18,
-    marginRight: 12,
-  },
-
-  activePlanCard: {
-    backgroundColor: '#1B4298',
-  },
-
-  badgeRecommended: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: '#D97706',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-
-  badgeRecommendedBasic: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-
-  planTag: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#A3C0F5',
-    marginBottom: 8,
-  },
-
-  planTagBasic: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    marginBottom: 8,
-  },
-
-  planHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-
-  planTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  planIconCircleGold: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  planIconCircleBasic: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#F0F5FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  crownIcon: {
-    width: 16,
-    height: 16,
-  },
-
-  planTitleGold: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-
-  planTitleBasic: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1E293B',
-  },
-
-  planPriceContainer: {
-    alignItems: 'flex-end',
-  },
-
-  planPriceGold: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-
-  planPriceBasic: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#21479B',
-  },
-
-  planPeriodGold: {
-    fontSize: 10,
-    color: '#A3C0F5',
-  },
-
-  planPeriodBasic: {
-    fontSize: 10,
-    color: '#64748B',
-  },
-
-  featuresList: {
-    gap: 8,
-    marginBottom: 16,
-  },
-
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  featureTextGold: {
-    flex: 1,
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-
-  featureTextBasic: {
-    flex: 1,
-    fontSize: 11,
-    color: '#475569',
-    fontWeight: '500',
-  },
-
-  featureCountGold: {
-    fontSize: 11,
-    color: '#A3C0F5',
-    fontWeight: '600',
-  },
-
-  featureCountBasic: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-
-  btnVerMaisGold: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  btnVerMaisGoldText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1B4298',
-  },
-
-  basicPlanCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-
-  btnVerMaisBasic: {
-    backgroundColor: '#1B4298',
-    borderRadius: 12,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  btnVerMaisBasicText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-
-  serviceItem: {
-    alignItems: 'center',
-    width: 70,
-  },
-
-  serviceCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginBottom: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  serviceLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#475569',
-    textAlign: 'center',
-  },
-
-  supportCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    marginHorizontal: 18,
+    marginTop: 24,
+    backgroundColor: C.primary,
+    borderRadius: 18,
     padding: 14,
-    marginHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
   },
-
-  supportIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F0F5FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  supportInfo: {
-    flex: 1,
-  },
-
-  supportTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-
-  supportSubtitle: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
+  supportIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: C.brandYellow, alignItems: 'center', justifyContent: 'center' },
+  supportTitle: { fontSize: 14, fontFamily: F.bold, color: '#FFFFFF' },
+  supportText: { fontSize: 12, fontFamily: F.regular, color: '#C9D6EE', marginTop: 2 },
 });

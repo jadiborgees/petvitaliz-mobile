@@ -1,132 +1,140 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Image } from 'react-native';
+import { View, StyleSheet, Animated, Image, Easing, Dimensions, StatusBar } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface SplashScreenProps {
   onFinish?: () => void;
 }
 
-export default function SplashScreen({ onFinish }: SplashScreenProps) {
-  // Valores animados para o primeiro ícone (icon.png)
-  const iconOpacity = useRef(new Animated.Value(0)).current;
-  const iconScale = useRef(new Animated.Value(0.7)).current;
+const { width, height } = Dimensions.get('window');
 
-  // Valores animados para a marca (NomeMarca.png)
+const PRIMARY = '#183C98';
+
+// Pegadas em zigue-zague (esquerda/direita), como um pet andando até o centro
+const PAWS = [
+  { x: 0.40, y: 0.94, r: '-12deg' },
+  { x: 0.52, y: 0.87, r: '12deg' },
+  { x: 0.38, y: 0.80, r: '-12deg' },
+  { x: 0.50, y: 0.73, r: '12deg' },
+  { x: 0.36, y: 0.66, r: '-12deg' },
+  { x: 0.48, y: 0.59, r: '12deg' },
+];
+const PAW_SIZE = 48;
+
+export default function SplashScreen({ onFinish }: SplashScreenProps) {
+  const paws = useRef(PAWS.map(() => new Animated.Value(0))).current; // pisada
+  const fades = useRef(PAWS.map(() => new Animated.Value(1))).current; // rastro some
+  const logoScale = useRef(new Animated.Value(0)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
   const brandOpacity = useRef(new Animated.Value(0)).current;
-  const brandScale = useRef(new Animated.Value(0.85)).current;
+  const brandY = useRef(new Animated.Value(16)).current;
+  const tagOpacity = useRef(new Animated.Value(0)).current;
+  const screenOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      // 1. Entrada suave do ícone
+    // cada passo: a pata "pisa" (cai grande e assenta) e a pegada de 3 passos atrás vai apagando
+    const steps = paws.map((v: Animated.Value, i: number) =>
       Animated.parallel([
-        Animated.timing(iconOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(iconScale, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
+        Animated.timing(v, { toValue: 1, duration: 260, easing: Easing.out(Easing.back(2)), useNativeDriver: true }),
+        ...(i >= 3
+          ? [Animated.timing(fades[i - 3], { toValue: 0.35, duration: 400, useNativeDriver: true })]
+          : []),
+      ])
+    );
 
-      // 2. Exibe o ícone por 1 segundo
-      Animated.delay(1000),
-
-      // 3. Saída do ícone
+    const anim = Animated.sequence([
+      // 1. pet andando: um passo de cada vez
+      Animated.stagger(380, steps),
+      Animated.delay(350),
+      // 2. pegadas somem
+      Animated.parallel(
+        fades.map((v: Animated.Value) => Animated.timing(v, { toValue: 0, duration: 400, useNativeDriver: true }))
+      ),
+      // 3. logo aparece
       Animated.parallel([
-        Animated.timing(iconOpacity, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(iconScale, {
-          toValue: 0.8,
-          duration: 400,
-          useNativeDriver: true,
-        }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.spring(logoScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
       ]),
-
-      // 4. Entrada da imagem NomeMarca.png
+      // 4. nome aparece
       Animated.parallel([
-        Animated.timing(brandOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(brandScale, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
+        Animated.timing(brandOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.timing(brandY, { toValue: 0, duration: 350, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]),
+      // 5. frase aparece
+      Animated.timing(tagOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.delay(700),
+      Animated.timing(screenOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]);
 
-      // 5. Exibe a imagem por 1.5 segundos antes de redirecionar
-      Animated.delay(1500),
-    ]).start(() => {
-      if (onFinish) {
-        onFinish();
-      }
+    anim.start(({ finished }: { finished: boolean }) => {
+      if (finished) onFinish?.();
     });
+    return () => anim.stop();
   }, []);
 
-  return (
-    <View style={styles.container}>
-      {/* 1º Momento: Ícone inicial */}
-      <Animated.View
-        style={[
-          styles.centered,
-          {
-            opacity: iconOpacity,
-            transform: [{ scale: iconScale }],
-          },
-        ]}
-      >
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.iconImage}
-          resizeMode="contain"
-        />
-      </Animated.View>
 
-      {/* 2º Momento: Imagem do Nome da Marca */}
-      <Animated.View
-        style={[
-          styles.centered,
-          {
-            opacity: brandOpacity,
-            transform: [{ scale: brandScale }],
-          },
-        ]}
-      >
-        <Image
-          source={require('../../assets/NomeMarca.png')}
-          style={styles.brandImage}
+  return (
+    <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
+      <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
+
+
+      {/* Patinhas */}
+      {PAWS.map((p, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.paw,
+            {
+              left: width * p.x,
+              top: height * p.y,
+              opacity: Animated.multiply(
+                paws[i].interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 1] }),
+                fades[i]
+              ),
+              transform: [
+                { rotate: p.r },
+                { scale: paws[i].interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] }) },
+              ],
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name="paw" size={PAW_SIZE} color="#FFFFFF" />
+        </Animated.View>
+      ))}
+
+      {/* Logo */}
+      <View style={styles.center}>
+        <Animated.View style={[styles.logoCircle, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+          <Image source={require('../../assets/logo-icon.png')} style={[styles.logoIcon, { tintColor: '#FFFFFF' }]} resizeMode="contain" />
+        </Animated.View>
+
+        <Animated.Image
+          source={require('../../assets/logo-wordmark-white.png')}
+          style={[styles.wordmark, { opacity: brandOpacity, transform: [{ translateY: brandY }] }]}
           resizeMode="contain"
         />
-      </Animated.View>
-    </View>
+
+
+        <Animated.Text style={[styles.tagline, { opacity: tagOpacity }]}>
+          Cuidado completo para o seu pet
+        </Animated.Text>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#21479B',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centered: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconImage: {
-    width: 120,
-    height: 120,
-  },
-  brandImage: {
-    width: 240,
-    height: 80,
+  container: { flex: 1, backgroundColor: PRIMARY, overflow: 'hidden' },
+  paw: { position: 'absolute' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  logoCircle: { alignItems: 'center', justifyContent: 'center' },
+  logoIcon: { width: 110, height: 100 },
+  wordmark: { width: 200, height: 42, marginTop: 22 },
+  tagline: {
+    marginTop: 12,
+    color: '#FFFFFF',
+    opacity: 0.85,
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
 });

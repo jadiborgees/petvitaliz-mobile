@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,10 +12,16 @@ import {
   Platform,
   Alert,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import PrivateHeader from '../../components/PrivateHeader';
+import PetAvatar, { getSpeciesIcon } from '../../components/PetAvatar';
+import { theme } from '../../theme/privateTheme';
+import { PLAN_NAMES, getPlanId } from '../../data/planCoverage';
 
 export interface Pet {
   id: string;
@@ -30,6 +35,8 @@ export interface Pet {
   hasActivePlan: boolean;
   bio: string;
   avatar: string | null;
+  traits?: string[]; // ids de PET_TRAITS
+  loves?: string[]; // ids de PET_LOVES
 }
 
 interface PrivatePetsFlowScreenProps {
@@ -39,6 +46,7 @@ interface PrivatePetsFlowScreenProps {
   onNavigateToPlans?: () => void;
   onNavigateToBenefits?: () => void;
   onNavigateToProfile?: () => void;
+  onContractPlan?: (petId: string) => void;
 
   pets: Pet[];
   onPetsChange: React.Dispatch<React.SetStateAction<Pet[]>>;
@@ -48,7 +56,98 @@ type FlowMode = 'list' | 'empty' | 'step1' | 'step2' | 'step3' | 'profile';
 type ProfileTab = 'sobre' | 'saude' | 'historico';
 
 const speciesList = ['Cachorro', 'Gato', 'Ave', 'Outro'];
-const genderList = ['Macho', 'Fêmea'];
+const genderList = ['Fêmea', 'Macho'];
+
+// Etiquetas do "Sobre o pet". O texto muda conforme o sexo.
+export const PET_TRAITS = [
+  { id: 'brincalhao', icon: 'smile', male: 'Brincalhão', female: 'Brincalhona' },
+  { id: 'carinhoso', icon: 'heart', male: 'Carinhoso', female: 'Carinhosa' },
+  { id: 'dorminhoco', icon: 'moon', male: 'Dorminhoco', female: 'Dorminhoca' },
+  { id: 'sociavel', icon: 'users', male: 'Sociável', female: 'Sociável' },
+  { id: 'agitado', icon: 'zap', male: 'Agitado', female: 'Agitada' },
+  { id: 'medroso', icon: 'cloud-lightning', male: 'Medroso', female: 'Medrosa' },
+] as const;
+
+export const PET_LOVES = [
+  { id: 'passear', icon: 'map', label: 'Passear' },
+  { id: 'petiscos', icon: 'gift', label: 'Petiscos' },
+  { id: 'bolinha', icon: 'circle', label: 'Bolinha' },
+  { id: 'agua', icon: 'droplet', label: 'Água' },
+  { id: 'sofa', icon: 'home', label: 'Sofá' },
+] as const;
+
+const BIO_LIMIT = 200;
+
+export const traitLabel = (id: string, gender: string) => {
+  const trait = PET_TRAITS.find((item) => item.id === id);
+  if (!trait) return id;
+  return gender === 'Macho' ? trait.male : trait.female;
+};
+
+export const loveLabel = (id: string) => PET_LOVES.find((item) => item.id === id)?.label ?? id;
+
+// Idade: guarda "4 anos" / "1 ano" / "3 meses" / "1 mês".
+const formatAge = (value: string, unit: 'anos' | 'meses') => {
+  const n = Number(value);
+  if (unit === 'meses') return `${n} ${n === 1 ? 'mês' : 'meses'}`;
+  return `${n} ${n === 1 ? 'ano' : 'anos'}`;
+};
+
+const parseAge = (age: string): { value: string; unit: 'anos' | 'meses' } => {
+  const value = (age.match(/\d+/) ?? [''])[0];
+  return { value, unit: /m[eê]s/i.test(age) ? 'meses' : 'anos' };
+};
+
+// Peso: só números e uma vírgula, até 2 casas decimais.
+const sanitizeWeight = (text: string) => {
+  const cleaned = text.replace(/\./g, ',').replace(/[^0-9,]/g, '');
+  const [whole, ...rest] = cleaned.split(',');
+  if (rest.length === 0) return whole.slice(0, 3);
+  return `${whole.slice(0, 3)},${rest.join('').slice(0, 2)}`;
+};
+
+// Etiqueta que dá um pulinho ao ser tocada.
+function BounceChip({
+  label,
+  icon,
+  selected,
+  tone = 'blue',
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  selected: boolean;
+  tone?: 'blue' | 'orange';
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, speed: 50, bounciness: 12 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 10 }),
+    ]).start();
+    onPress();
+  };
+
+  const activeStyle = tone === 'blue' ? styles.chipBlue : styles.chipOrange;
+  const activeText = tone === 'blue' ? '#FFFFFF' : theme.colors.warning;
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <TouchableOpacity
+        style={[styles.chip, selected && activeStyle]}
+        onPress={handlePress}
+        activeOpacity={0.85}
+      >
+        <Feather name={icon} size={13} color={selected ? activeText : theme.colors.textSecondary} />
+        <Text style={[styles.chipText, selected && { color: activeText, fontFamily: theme.fonts.bold }]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -66,6 +165,7 @@ export default function PrivatePetsFlowScreen({
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
+  onContractPlan,
   pets,
   onPetsChange,
 }: PrivatePetsFlowScreenProps) {
@@ -85,9 +185,16 @@ export default function PrivatePetsFlowScreen({
   const [petAge, setPetAge] = useState('');
   const [petWeight, setPetWeight] = useState('');
   const [petBio, setPetBio] = useState('');
+  const [ageUnit, setAgeUnit] = useState<'anos' | 'meses'>('anos');
+  const [petTraits, setPetTraits] = useState<string[]>([]);
+  const [petLoves, setPetLoves] = useState<string[]>([]);
+  const [choosePlanNow, setChoosePlanNow] = useState(false);
+
+  // Animações da etapa 3
+  const avatarWiggle = useRef(new Animated.Value(0)).current;
+  const pawWiggle = useRef(new Animated.Value(0)).current;
 
   const [isSpeciesModalVisible, setIsSpeciesModalVisible] = useState(false);
-  const [isGenderModalVisible, setIsGenderModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
   // Mantém a tela sincronizada com a lista compartilhada.
@@ -114,6 +221,10 @@ export default function PrivatePetsFlowScreen({
     setPetAge('');
     setPetWeight('');
     setPetBio('');
+    setAgeUnit('anos');
+    setPetTraits([]);
+    setPetLoves([]);
+    setChoosePlanNow(false);
   };
 
   const startNewPet = () => {
@@ -129,9 +240,13 @@ export default function PrivatePetsFlowScreen({
     setPetSpecies(pet.species);
     setPetBreed(pet.breed);
     setPetGender(pet.gender);
-    setPetAge(pet.age);
-    setPetWeight(pet.weight);
+    const parsedAge = parseAge(pet.age);
+    setPetAge(parsedAge.value);
+    setAgeUnit(parsedAge.unit);
+    setPetWeight(sanitizeWeight(pet.weight.replace(/kg/i, '').trim()));
     setPetBio(pet.bio);
+    setPetTraits(pet.traits ?? []);
+    setPetLoves(pet.loves ?? []);
     setMode('step1');
   };
 
@@ -199,7 +314,7 @@ export default function PrivatePetsFlowScreen({
   };
 
   const validateStep2 = () => {
-    if (!petAge.trim()) {
+    if (!petAge.trim() || Number(petAge) === 0) {
       Alert.alert('Campo obrigatório', 'Informe a idade aproximada do pet.');
       return false;
     }
@@ -215,14 +330,17 @@ export default function PrivatePetsFlowScreen({
       name: petName.trim(),
       species: petSpecies,
       breed: petBreed.trim() || 'SRD (Sem Raça Definida)',
-      age: petAge.trim(),
+      age: formatAge(petAge, ageUnit),
       gender: petGender,
-      weight: petWeight.trim(),
+      weight: petWeight.replace(/,$/, '') ? `${petWeight.replace(/,$/, '')} kg` : '',
       plan: existingPet?.plan ?? null,
       hasActivePlan: existingPet?.hasActivePlan ?? false,
       bio: petBio.trim(),
       avatar: petImage,
+      traits: petTraits,
+      loves: petLoves,
     };
+    const wantsPlan = !editingPetId && choosePlanNow;
 
     if (editingPetId) {
       onPetsChange((previous) =>
@@ -238,6 +356,45 @@ export default function PrivatePetsFlowScreen({
 
     resetForm();
     setMode('list');
+
+    // "Escolher um plano agora": abre o checkout com este pet.
+    if (wantsPlan) {
+      if (onContractPlan) onContractPlan(petData.id);
+      else onNavigateToPlans?.();
+    }
+  };
+
+  // A patinha do botão balança e depois conclui.
+  const finishWithWiggle = () => {
+    pawWiggle.setValue(0);
+    Animated.timing(pawWiggle, {
+      toValue: 1,
+      duration: 450,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start(() => savePet());
+  };
+
+  // O avatar balança ao entrar na etapa 3.
+  useEffect(() => {
+    if (mode !== 'step3') return;
+    avatarWiggle.setValue(0);
+    Animated.timing(avatarWiggle, {
+      toValue: 1,
+      duration: 700,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [mode]);
+
+  const wiggle = (value: Animated.Value) =>
+    value.interpolate({
+      inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
+      outputRange: ['0deg', '-14deg', '12deg', '-8deg', '4deg', '0deg'],
+    });
+
+  const toggleItem = (list: string[], setList: (items: string[]) => void, id: string) => {
+    setList(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
   };
 
   const requestDeletePet = (pet: Pet) => {
@@ -305,7 +462,7 @@ export default function PrivatePetsFlowScreen({
           },
         ]}
       >
-        <Ionicons name="paw" size={size * 0.42} color="#21479B" />
+        <MaterialCommunityIcons name={getSpeciesIcon(pet.species)} size={size * 0.48} color="#183C98" />
       </View>
     );
   };
@@ -320,7 +477,7 @@ export default function PrivatePetsFlowScreen({
       activeOpacity={0.75}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={19} color="#21479B" />
+      <Ionicons name={icon} size={19} color="#183C98" />
       <Text style={styles.menuButtonText}>{title}</Text>
       <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
     </TouchableOpacity>
@@ -328,357 +485,388 @@ export default function PrivatePetsFlowScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleBack}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={24} color="#21479B" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>
-          {mode === 'profile'
+      <PrivateHeader
+        title={
+          mode === 'profile'
             ? 'Perfil Pet'
-            : mode === 'step1'
-              ? 'Identificação'
-              : mode === 'step2'
-                ? 'Características'
-                : mode === 'step3'
-                  ? 'Sobre o Pet'
-                  : 'Meus Pets'}
-        </Text>
-
-        <View style={{ width: 32 }} />
-      </View>
+            : mode === 'step1' || mode === 'step2' || mode === 'step3'
+              ? editingPetId
+                ? 'Editar pet'
+                : 'Adicionar pet'
+              : 'Meus Pets'
+        }
+        onBack={handleBack}
+        right={
+          mode === 'list' ? (
+            <TouchableOpacity onPress={startNewPet} activeOpacity={0.7}>
+              <Feather name="plus" size={23} color={theme.colors.primary} />
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {mode === 'empty' && (
-          <View style={styles.emptyContainer}>
-            <View style={styles.illustrationCircle}>
-              <Ionicons name="paw" size={58} color="#21479B" />
-            </View>
-
-            <Text style={styles.emptyTitle}>
-              Você ainda não tem nenhum pet cadastrado
+          <View style={[styles.v2Card, styles.v2EmptyCard]}>
+            <PetAvatar size={72} />
+            <Text style={styles.v2EmptyTitle}>Cadastre seu primeiro pet</Text>
+            <Text style={styles.v2EmptyText}>
+              Leva menos de 1 minuto. Depois você escolhe um plano para ele.
             </Text>
-
-            <Text style={styles.emptySubtitle}>
-              Cadastre seu pet para manter as informações dele organizadas
-              e acessar os serviços disponíveis.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={startNewPet}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.primaryBtnText}>Adicionar Pet</Text>
+            <TouchableOpacity style={styles.v2PrimaryButton} onPress={startNewPet} activeOpacity={0.85}>
+              <Feather name="plus" size={17} color="#FFFFFF" />
+              <Text style={styles.v2PrimaryButtonText}>Adicionar pet</Text>
             </TouchableOpacity>
           </View>
         )}
 
+        {mode === 'empty' && (
+          <>
+            <Text style={styles.v2SectionTitle}>Por que cadastrar?</Text>
+            <View style={[styles.v2Card, styles.v2ListCard]}>
+              {[
+                { icon: 'award' as const, text: 'Contratar um plano para ele' },
+                { icon: 'calendar' as const, text: 'Agendar consultas e banho' },
+                { icon: 'shield' as const, text: 'Carteira de vacinação digital' },
+              ].map((item, index) => (
+                <View key={item.text} style={[styles.v2ReasonRow, index < 2 && styles.v2Divider]}>
+                  <Feather name={item.icon} size={17} color={theme.colors.primary} />
+                  <Text style={styles.v2ReasonText}>{item.text}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {mode === 'list' && (
           <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionMainTitle}>Pets cadastrados</Text>
-              <Text style={styles.sectionSubtitle}>
-                Visualize e gerencie os pets da sua conta.
-              </Text>
-            </View>
+            <Text style={styles.v2Count}>
+              {pets.length} {pets.length === 1 ? 'pet cadastrado' : 'pets cadastrados'}
+            </Text>
 
-            {pets.map((pet) => (
-              <View key={pet.id} style={styles.petCardItem}>
-                <View style={styles.petCardTop}>
-                  {renderPetAvatar(pet, 58)}
+            {pets.map((pet) => {
+              const planId = pet.hasActivePlan ? getPlanId(pet.plan) : null;
+              const details = [pet.breed, pet.age, pet.gender].filter(Boolean).join(' · ');
 
-                  <View style={styles.petCardInfo}>
-                    <Text style={styles.petCardName}>{pet.name}</Text>
-
-                    <Text style={styles.petCardDetails}>
-                      {pet.species} · {pet.breed}
-                    </Text>
-
-                    <Text style={styles.petCardSubDetails}>
-                      {pet.age} · {pet.gender}
-                    </Text>
-
-                    <View
-                      style={[
-                        styles.planBadge,
-                        pet.hasActivePlan
-                          ? styles.activePlanBadge
-                          : styles.noPlanBadge,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.planBadgeText,
-                          pet.hasActivePlan
-                            ? styles.activePlanText
-                            : styles.noPlanText,
-                        ]}
-                      >
-                        {pet.hasActivePlan
-                          ? pet.plan || 'Plano ativo'
-                          : 'Pet sem plano'}
+              return (
+                <View key={pet.id} style={[styles.v2Card, styles.v2PetCard]}>
+                  <View style={styles.v2PetTop}>
+                    <PetAvatar species={pet.species} avatar={pet.avatar} size={50} />
+                    <View style={styles.v2PetInfo}>
+                      <Text style={styles.v2PetName}>{pet.name}</Text>
+                      <Text style={styles.v2PetDetails} numberOfLines={1}>
+                        {details || pet.species}
+                      </Text>
+                    </View>
+                    <View style={[styles.v2Badge, planId ? styles.v2BadgeActive : styles.v2BadgeNoPlan]}>
+                      <Text style={[styles.v2BadgeText, { color: planId ? theme.colors.success : theme.colors.warning }]}>
+                        {planId ? PLAN_NAMES[planId].replace('Plano ', '') : 'Sem plano'}
                       </Text>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.petCardDivider} />
+                  <View style={styles.v2Actions}>
+                    {planId ? (
+                      <TouchableOpacity
+                        style={[styles.v2MainAction, styles.v2MainActionSoft]}
+                        onPress={() => openPetProfile(pet)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.v2MainActionText, { color: theme.colors.primary }]}>Ver perfil</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.v2MainAction}
+                        onPress={() => (onContractPlan ? onContractPlan(pet.id) : onNavigateToPlans?.())}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.v2MainActionText}>Contratar plano</Text>
+                      </TouchableOpacity>
+                    )}
 
-                <View style={styles.petCardActionsRow}>
-                  <TouchableOpacity
-                    onPress={() => openPetProfile(pet)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.seeProfileLink}>Ver perfil ›</Text>
-                  </TouchableOpacity>
+                    {!planId && (
+                      <TouchableOpacity style={styles.v2IconButton} onPress={() => openPetProfile(pet)}>
+                        <Feather name="eye" size={17} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                    )}
 
-                  <View style={styles.actionIconsRight}>
-                    <TouchableOpacity
-                      style={styles.iconActionBtn}
-                      onPress={() => startEditingPet(pet)}
-                    >
-                      <Ionicons
-                        name="pencil-outline"
-                        size={17}
-                        color="#64748B"
-                      />
+                    <TouchableOpacity style={styles.v2IconButton} onPress={() => startEditingPet(pet)}>
+                      <Feather name="edit-2" size={16} color={theme.colors.primary} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.iconActionBtn}
-                      onPress={() => requestDeletePet(pet)}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={17}
-                        color="#DC2626"
-                      />
-                    </TouchableOpacity>
+                    {/* Pet com plano ativo não pode ser excluído (N10) */}
+                    {planId ? (
+                      <TouchableOpacity style={styles.v2IconButton} onPress={() => requestDeletePet(pet)}>
+                        <Feather name="trash-2" size={16} color="#A7B1C2" />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.v2IconButton} onPress={() => requestDeletePet(pet)}>
+                        <Feather name="trash-2" size={16} color={theme.colors.danger} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
 
-            <TouchableOpacity
-              style={styles.addPetButton}
-              onPress={startNewPet}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name="add-circle-outline"
-                size={20}
-                color="#21479B"
-              />
-              <Text style={styles.addPetButtonText}>
-                Adicionar outro pet
-              </Text>
+            <TouchableOpacity style={styles.v2AddCard} onPress={startNewPet} activeOpacity={0.8}>
+              <Feather name="plus" size={17} color={theme.colors.primary} />
+              <Text style={styles.v2AddText}>Adicionar outro pet</Text>
             </TouchableOpacity>
           </>
         )}
 
+        {(mode === 'step1' || mode === 'step2' || mode === 'step3') && (
+          <View style={styles.stepHeader}>
+            <View style={styles.stepLabelRow}>
+              <Text style={styles.stepLabel}>
+                Etapa {mode === 'step1' ? 1 : mode === 'step2' ? 2 : 3} de 3
+              </Text>
+              <Text style={styles.stepLabel}>
+                {mode === 'step1' ? 'Identificação' : mode === 'step2' ? 'Características' : 'Sobre o pet'}
+              </Text>
+            </View>
+            <View style={styles.stepBars}>
+              {[1, 2, 3].map((n) => (
+                <View
+                  key={n}
+                  style={[
+                    styles.stepBar,
+                    n <= (mode === 'step1' ? 1 : mode === 'step2' ? 2 : 3) && styles.stepBarActive,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
         {mode === 'step1' && (
           <>
-            <View style={styles.progressBarRow}>
-              <View style={[styles.progressSegment, styles.activeSegment]} />
-              <View style={styles.progressSegment} />
-              <View style={styles.progressSegment} />
-            </View>
-
-            <View style={styles.avatarUploadSection}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={handlePickPetImage}
-                style={styles.avatarContainerMain}
-              >
-                {petImage ? (
-                  <Image
-                    source={{ uri: petImage }}
-                    style={styles.avatarImageStyle}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholderInner}>
-                    <Ionicons
-                      name="camera-outline"
-                      size={32}
-                      color="#94A3B8"
-                    />
-                  </View>
-                )}
-
-                <View style={styles.cameraBadgeFixed}>
-                  <Ionicons name="add" size={14} color="#FFFFFF" />
+            <View style={styles.photoSection}>
+              <TouchableOpacity activeOpacity={0.85} onPress={handlePickPetImage}>
+                <PetAvatar species={petSpecies} avatar={petImage} size={84} />
+                <View style={styles.cameraBadge}>
+                  <Feather name="camera" size={13} color="#FFFFFF" />
                 </View>
               </TouchableOpacity>
-
-              <Text style={styles.avatarUploadText}>
-                Foto do pet (opcional)
+              <Text style={styles.photoText}>
+                {petImage ? 'Toque para trocar a foto' : 'Adicionar foto (opcional)'}
               </Text>
             </View>
 
-            <Text style={styles.sectionLabel}>DADOS BÁSICOS</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome *</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.fieldLabel}>Nome</Text>
               <TextInput
-                style={styles.input}
+                style={styles.field}
                 placeholder="Ex.: Lua"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#9AA6B8"
                 value={petName}
                 onChangeText={setPetName}
+                maxLength={30}
               />
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Espécie *</Text>
+              <Text style={styles.fieldLabel}>Espécie</Text>
               <TouchableOpacity
-                style={styles.selectBox}
+                style={[styles.field, styles.selectField]}
                 onPress={() => setIsSpeciesModalVisible(true)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.selectText}>{petSpecies}</Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={16}
-                  color="#64748B"
+                <MaterialCommunityIcons
+                  name={getSpeciesIcon(petSpecies)}
+                  size={18}
+                  color={theme.colors.primary}
                 />
+                <Text style={styles.selectFieldText}>{petSpecies}</Text>
+                <Feather name="chevron-down" size={18} color={theme.colors.muted} />
               </TouchableOpacity>
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Raça <Text style={styles.optionalText}>(opcional)</Text>
+              <Text style={styles.fieldLabel}>
+                Raça <Text style={styles.fieldOptional}>(opcional)</Text>
               </Text>
               <TextInput
-                style={styles.input}
+                style={[styles.field, { marginBottom: 0 }]}
                 placeholder="Ex.: Golden Retriever ou SRD"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor="#9AA6B8"
                 value={petBreed}
                 onChangeText={setPetBreed}
               />
             </View>
 
             <TouchableOpacity
-              style={styles.primaryBtn}
+              style={styles.v2PrimaryButton}
               onPress={() => {
                 if (validateStep1()) setMode('step2');
               }}
+              activeOpacity={0.85}
             >
-              <Text style={styles.primaryBtnText}>Continuar</Text>
+              <Text style={styles.v2PrimaryButtonText}>Continuar</Text>
             </TouchableOpacity>
           </>
         )}
 
         {mode === 'step2' && (
           <>
-            <View style={styles.progressBarRow}>
-              <View style={[styles.progressSegment, styles.activeSegment]} />
-              <View style={[styles.progressSegment, styles.activeSegment]} />
-              <View style={styles.progressSegment} />
-            </View>
+            <View style={styles.formCard}>
+              <Text style={styles.fieldLabel}>Sexo</Text>
+              <View style={styles.optionRow}>
+                {genderList.map((gender) => {
+                  const selected = petGender === gender;
+                  return (
+                    <TouchableOpacity
+                      key={gender}
+                      style={[styles.optionButton, selected && styles.optionButtonActive]}
+                      onPress={() => setPetGender(gender)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons
+                        name={gender === 'Fêmea' ? 'gender-female' : 'gender-male'}
+                        size={16}
+                        color={selected ? theme.colors.primary : theme.colors.textSecondary}
+                      />
+                      <Text style={[styles.optionText, selected && styles.optionTextActive]}>{gender}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Sexo *</Text>
-              <TouchableOpacity
-                style={styles.selectBox}
-                onPress={() => setIsGenderModalVisible(true)}
-              >
-                <Text style={styles.selectText}>{petGender}</Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={16}
-                  color="#64748B"
+              <Text style={styles.fieldLabel}>Idade aproximada</Text>
+              <View style={styles.ageRow}>
+                <TextInput
+                  style={[styles.field, styles.ageInput]}
+                  placeholder={ageUnit === 'anos' ? 'Ex.: 4' : 'Ex.: 6'}
+                  placeholderTextColor="#9AA6B8"
+                  keyboardType="number-pad"
+                  value={petAge}
+                  onChangeText={(text) => setPetAge(text.replace(/[^0-9]/g, '').slice(0, 2))}
+                  maxLength={2}
                 />
-              </TouchableOpacity>
-            </View>
+                <View style={styles.unitToggle}>
+                  {(['anos', 'meses'] as const).map((unit) => (
+                    <TouchableOpacity
+                      key={unit}
+                      style={[styles.unitOption, ageUnit === unit && styles.unitOptionActive]}
+                      onPress={() => setAgeUnit(unit)}
+                    >
+                      <Text style={[styles.unitText, ageUnit === unit && styles.unitTextActive]}>{unit}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Idade aproximada *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ex.: 4 anos"
-                placeholderTextColor="#94A3B8"
-                value={petAge}
-                onChangeText={setPetAge}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Peso atual <Text style={styles.optionalText}>(opcional)</Text>
+              <Text style={styles.fieldLabel}>
+                Peso <Text style={styles.fieldOptional}>(opcional)</Text>
               </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ex.: 28 kg"
-                placeholderTextColor="#94A3B8"
-                value={petWeight}
-                onChangeText={setPetWeight}
-              />
+              <View style={[styles.field, styles.weightField]}>
+                <TextInput
+                  style={styles.weightInput}
+                  placeholder="Ex.: 28,5"
+                  placeholderTextColor="#9AA6B8"
+                  keyboardType="decimal-pad"
+                  value={petWeight}
+                  onChangeText={(text) => setPetWeight(sanitizeWeight(text))}
+                />
+                <Text style={styles.weightUnit}>kg</Text>
+              </View>
             </View>
 
             <TouchableOpacity
-              style={styles.primaryBtn}
+              style={styles.v2PrimaryButton}
               onPress={() => {
                 if (validateStep2()) setMode('step3');
               }}
+              activeOpacity={0.85}
             >
-              <Text style={styles.primaryBtnText}>Continuar</Text>
+              <Text style={styles.v2PrimaryButtonText}>Continuar</Text>
             </TouchableOpacity>
           </>
         )}
 
         {mode === 'step3' && (
           <>
-            <View style={styles.progressBarRow}>
-              <View style={[styles.progressSegment, styles.activeSegment]} />
-              <View style={[styles.progressSegment, styles.activeSegment]} />
-              <View style={[styles.progressSegment, styles.activeSegment]} />
+            <View style={styles.aboutHeader}>
+              <Animated.View style={{ transform: [{ rotate: wiggle(avatarWiggle) }] }}>
+                <PetAvatar species={petSpecies} avatar={petImage} size={50} />
+              </Animated.View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aboutTitle}>
+                  Conta pra gente sobre {petGender === 'Macho' ? 'o' : 'a'} {petName.trim() || 'seu pet'}
+                </Text>
+                <Text style={styles.aboutSubtitle}>Tudo opcional, toque para marcar</Text>
+              </View>
             </View>
 
-            <Text style={styles.sectionLabel}>SOBRE O PET</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.fieldLabel}>{petGender === 'Macho' ? 'Jeitinho dele' : 'Jeitinho dela'}</Text>
+              <View style={styles.chipWrap}>
+                {PET_TRAITS.map((trait) => (
+                  <BounceChip
+                    key={trait.id}
+                    label={petGender === 'Macho' ? trait.male : trait.female}
+                    icon={trait.icon}
+                    selected={petTraits.includes(trait.id)}
+                    onPress={() => toggleItem(petTraits, setPetTraits, trait.id)}
+                  />
+                ))}
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Personalidade e hábitos (opcional)
-              </Text>
+              <Text style={styles.fieldLabel}>{petGender === 'Macho' ? 'Ele adora' : 'Ela adora'}</Text>
+              <View style={styles.chipWrap}>
+                {PET_LOVES.map((love) => (
+                  <BounceChip
+                    key={love.id}
+                    label={love.label}
+                    icon={love.icon}
+                    tone="orange"
+                    selected={petLoves.includes(love.id)}
+                    onPress={() => toggleItem(petLoves, setPetLoves, love.id)}
+                  />
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Algo mais?</Text>
               <TextInput
-                style={styles.textArea}
-                placeholder="Conte um pouco sobre a personalidade e os hábitos do seu pet..."
-                placeholderTextColor="#94A3B8"
+                style={[styles.field, styles.bioField]}
+                placeholder="Ex.: tem medo de trovão, não gosta de banho..."
+                placeholderTextColor="#9AA6B8"
                 multiline
-                numberOfLines={5}
+                maxLength={BIO_LIMIT}
                 value={petBio}
                 onChangeText={setPetBio}
               />
-            </View>
-
-            <View style={styles.infoBox}>
-              <Ionicons
-                name="information-circle-outline"
-                size={20}
-                color="#21479B"
-              />
-              <Text style={styles.infoText}>
-                O cadastro do pet é gratuito. Você poderá contratar um plano
-                separadamente quando desejar.
+              <Text style={styles.bioCounter}>
+                {petBio.length}/{BIO_LIMIT}
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={savePet}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.primaryBtnText}>
-                {editingPetId ? 'Salvar alterações' : 'Concluir cadastro'}
+            {!editingPetId && (
+              <TouchableOpacity
+                style={styles.planCheck}
+                onPress={() => setChoosePlanNow((value) => !value)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.checkbox, choosePlanNow && styles.checkboxActive]}>
+                  {choosePlanNow && <Feather name="check" size={14} color="#FFFFFF" />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.planCheckTitle}>Escolher um plano agora</Text>
+                  <Text style={styles.planCheckText}>Opcional. Dá para contratar depois.</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.v2PrimaryButton} onPress={finishWithWiggle} activeOpacity={0.85}>
+              <Animated.View style={{ transform: [{ rotate: wiggle(pawWiggle) }] }}>
+                <MaterialCommunityIcons name="paw" size={18} color="#FFFFFF" />
+              </Animated.View>
+              <Text style={styles.v2PrimaryButtonText}>
+                {editingPetId
+                  ? 'Salvar alterações'
+                  : choosePlanNow
+                    ? 'Concluir e ver planos'
+                    : 'Concluir cadastro'}
               </Text>
             </TouchableOpacity>
           </>
@@ -741,6 +929,24 @@ export default function PrivatePetsFlowScreen({
                   label="Sobre"
                   value={selectedPet.bio || 'Nenhuma informação adicionada.'}
                 />
+                {(selectedPet.traits?.length ?? 0) + (selectedPet.loves?.length ?? 0) > 0 && (
+                  <View style={[styles.chipWrap, { marginTop: 12, marginBottom: 0 }]}>
+                    {(selectedPet.traits ?? []).map((id) => (
+                      <View key={id} style={[styles.chip, styles.chipBlue]}>
+                        <Text style={[styles.chipText, { color: '#FFFFFF' }]}>
+                          {traitLabel(id, selectedPet.gender)}
+                        </Text>
+                      </View>
+                    ))}
+                    {(selectedPet.loves ?? []).map((id) => (
+                      <View key={id} style={[styles.chip, styles.chipOrange]}>
+                        <Text style={[styles.chipText, { color: theme.colors.warning }]}>
+                          Adora {loveLabel(id).toLowerCase()}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
 
@@ -774,7 +980,7 @@ export default function PrivatePetsFlowScreen({
               style={styles.secondaryBtn}
               onPress={() => startEditingPet(selectedPet)}
             >
-              <Ionicons name="pencil-outline" size={17} color="#21479B" />
+              <Ionicons name="pencil-outline" size={17} color="#183C98" />
               <Text style={styles.secondaryBtnText}>
                 Editar informações
               </Text>
@@ -783,70 +989,41 @@ export default function PrivatePetsFlowScreen({
         )}
       </ScrollView>
 
+      {/* Lista de espécies (abre de baixo para cima) */}
       <Modal
         visible={isSpeciesModalVisible}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setIsSpeciesModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecione a espécie</Text>
-
-            {speciesList.map((species) => (
-              <TouchableOpacity
-                key={species}
-                style={styles.modalOption}
-                onPress={() => {
-                  setPetSpecies(species);
-                  setIsSpeciesModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalOptionText}>{species}</Text>
-              </TouchableOpacity>
-            ))}
-
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => setIsSpeciesModalVisible(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={isGenderModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsGenderModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecione o sexo</Text>
-
-            {genderList.map((gender) => (
-              <TouchableOpacity
-                key={gender}
-                style={styles.modalOption}
-                onPress={() => {
-                  setPetGender(gender);
-                  setIsGenderModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalOptionText}>{gender}</Text>
-              </TouchableOpacity>
-            ))}
-
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => setIsGenderModalVisible(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setIsSpeciesModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Qual é a espécie?</Text>
+            {speciesList.map((species) => {
+              const selected = petSpecies === species;
+              return (
+                <TouchableOpacity
+                  key={species}
+                  style={[styles.sheetOption, selected && styles.sheetOptionActive]}
+                  onPress={() => {
+                    setPetSpecies(species);
+                    setIsSpeciesModalVisible(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <PetAvatar species={species} size={36} background={selected ? '#FFFFFF' : theme.colors.primarySoft} />
+                  <Text style={[styles.sheetOptionText, selected && { fontFamily: theme.fonts.bold }]}>{species}</Text>
+                  {selected && <Feather name="check-circle" size={20} color={theme.colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {!!successMessage && (
@@ -856,6 +1033,8 @@ export default function PrivatePetsFlowScreen({
         </View>
       )}
 
+      {/* A barra some durante o cadastro, para focar em concluir */}
+      {(mode === 'list' || mode === 'empty' || mode === 'profile') && (
       <PrivateBottomNav
         currentRoute="PrivateProfile"
         onNavigateToHome={onNavigateToHome}
@@ -864,14 +1043,230 @@ export default function PrivatePetsFlowScreen({
         onNavigateToBenefits={onNavigateToBenefits}
         onNavigateToProfile={onNavigateToProfile}
       />
+      )}
     </SafeAreaView>
   );
 }
 
+const T = theme.colors;
+const TF = theme.fonts;
+
 const styles = StyleSheet.create({
+  // ---- Cadastro de pet ----
+  stepHeader: { marginBottom: 16 },
+  stepLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 7 },
+  stepLabel: { fontSize: 11, fontFamily: TF.medium, color: T.muted },
+  stepBars: { flexDirection: 'row', gap: 6 },
+  stepBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: '#E1E7F0' },
+  stepBarActive: { backgroundColor: T.primary },
+  photoSection: { alignItems: 'center', marginBottom: 16 },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: T.primary,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoText: { fontSize: 12, fontFamily: TF.medium, color: T.muted, marginTop: 8 },
+  formCard: {
+    backgroundColor: T.card,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: theme.radius.card,
+    padding: 14,
+  },
+  fieldLabel: { fontSize: 13, fontFamily: TF.bold, color: T.navy, marginBottom: 7 },
+  fieldOptional: { fontSize: 12, fontFamily: TF.regular, color: T.muted },
+  field: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontFamily: TF.medium,
+    color: T.navy,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
+  },
+  selectField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectFieldText: { flex: 1, fontSize: 14, fontFamily: TF.semibold, color: T.navy },
+  optionRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  optionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  optionButtonActive: { borderColor: T.primary, borderWidth: 1.5, backgroundColor: T.primarySoft },
+  optionText: { fontSize: 13, fontFamily: TF.medium, color: T.textSecondary },
+  optionTextActive: { fontFamily: TF.bold, color: T.navy },
+  ageRow: { flexDirection: 'row', gap: 8 },
+  ageInput: { flex: 1 },
+  unitToggle: { flexDirection: 'row', backgroundColor: T.divider, borderRadius: 10, padding: 3, height: 46 },
+  unitOption: { paddingHorizontal: 12, borderRadius: 8, justifyContent: 'center' },
+  unitOptionActive: { backgroundColor: '#FFFFFF' },
+  unitText: { fontSize: 12, fontFamily: TF.medium, color: T.muted },
+  unitTextActive: { fontFamily: TF.bold, color: T.navy },
+  weightField: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
+  weightInput: { flex: 1, fontSize: 14, fontFamily: TF.medium, color: T.navy, paddingVertical: 10 },
+  weightUnit: { fontSize: 13, fontFamily: TF.semibold, color: T.muted },
+
+  aboutHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  aboutTitle: { fontSize: 16, fontFamily: TF.bold, color: T.navy },
+  aboutSubtitle: { fontSize: 12, fontFamily: TF.regular, color: T.muted, marginTop: 2 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 14 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  chipBlue: { backgroundColor: T.primary, borderColor: T.primary },
+  chipOrange: { backgroundColor: '#FFF4DE', borderColor: '#FFE2AE' },
+  chipText: { fontSize: 12, fontFamily: TF.medium, color: T.textSecondary },
+  bioField: { minHeight: 80, paddingTop: 10, textAlignVertical: 'top', marginBottom: 4 },
+  bioCounter: { fontSize: 10, fontFamily: TF.regular, color: '#9AA6B8', textAlign: 'right' },
+  planCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: T.card,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 14,
+    padding: 13,
+    marginTop: 12,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: { backgroundColor: T.primary },
+  planCheckTitle: { fontSize: 13, fontFamily: TF.bold, color: T.navy },
+  planCheckText: { fontSize: 11, fontFamily: TF.regular, color: T.muted, marginTop: 1 },
+
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#D5DCE7', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { fontSize: 16, fontFamily: TF.bold, color: T.navy, marginBottom: 10 },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    marginBottom: 4,
+  },
+  sheetOptionActive: { backgroundColor: T.primarySoft, borderColor: T.primary },
+  sheetOptionText: { flex: 1, fontSize: 14, fontFamily: TF.medium, color: T.navy },
+
+  // ---- Padrão novo (Meus Pets) ----
+  v2Card: {
+    backgroundColor: T.card,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: theme.radius.bigCard,
+  },
+  v2EmptyCard: { alignItems: 'center', paddingVertical: 26, paddingHorizontal: 18 },
+  v2EmptyTitle: { fontSize: 17, fontFamily: TF.bold, color: T.navy, marginTop: 14, textAlign: 'center' },
+  v2EmptyText: { fontSize: 12, fontFamily: TF.regular, color: T.muted, textAlign: 'center', lineHeight: 18, marginTop: 6 },
+  v2PrimaryButton: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 48,
+    borderRadius: theme.radius.button,
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  v2PrimaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: TF.bold },
+  v2SectionTitle: { fontSize: 15, fontFamily: TF.bold, color: T.navy, marginTop: 24, marginBottom: 10 },
+  v2ListCard: { paddingHorizontal: 15, borderRadius: theme.radius.card },
+  v2ReasonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13 },
+  v2ReasonText: { fontSize: 13, fontFamily: TF.medium, color: T.navy },
+  v2Divider: { borderBottomWidth: 1, borderBottomColor: T.divider },
+
+  v2Count: { fontSize: 12, fontFamily: TF.medium, color: T.muted, marginBottom: 10 },
+  v2PetCard: { padding: 14, marginBottom: 12 },
+  v2PetTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  v2PetInfo: { flex: 1 },
+  v2PetName: { fontSize: 16, fontFamily: TF.bold, color: T.navy },
+  v2PetDetails: { fontSize: 12, fontFamily: TF.regular, color: T.muted, marginTop: 2 },
+  v2Badge: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 },
+  v2BadgeActive: { backgroundColor: '#E7F6EF' },
+  v2BadgeNoPlan: { backgroundColor: '#FFF4DE' },
+  v2BadgeText: { fontSize: 11, fontFamily: TF.bold },
+  v2Actions: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  v2MainAction: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  v2MainActionSoft: { backgroundColor: T.primarySoft },
+  v2MainActionText: { fontSize: 13, fontFamily: TF.bold, color: '#FFFFFF' },
+  v2IconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: T.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  v2AddCard: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#C9D3E3',
+    borderRadius: theme.radius.card,
+    paddingVertical: 14,
+    marginTop: 2,
+  },
+  v2AddText: { fontSize: 13, fontFamily: TF.bold, color: T.primary },
+
+
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: T.background,
   },
   header: {
     paddingTop:
@@ -893,12 +1288,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#183C98',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 120,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 130,
   },
   sectionHeader: {
     marginBottom: 16,
@@ -1015,7 +1410,7 @@ const styles = StyleSheet.create({
   seeProfileLink: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#21479B',
+    color: '#183C98',
   },
   actionIconsRight: {
     flexDirection: 'row',
@@ -1044,7 +1439,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   addPetButtonText: {
-    color: '#21479B',
+    color: '#183C98',
     fontWeight: '800',
     fontSize: 13,
   },
@@ -1060,7 +1455,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   activeSegment: {
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
   },
   avatarUploadSection: {
     alignItems: 'center',
@@ -1093,7 +1488,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -1169,7 +1564,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   primaryBtn: {
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
     height: 50,
     borderRadius: 14,
     alignItems: 'center',
@@ -1216,7 +1611,7 @@ const styles = StyleSheet.create({
   profilePetPlan: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#21479B',
+    color: '#183C98',
     marginTop: 8,
   },
   profileTabs: {
@@ -1233,7 +1628,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   profileTabActive: {
-    borderBottomColor: '#21479B',
+    borderBottomColor: '#183C98',
   },
   profileTabText: {
     fontSize: 12,
@@ -1241,7 +1636,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   profileTabTextActive: {
-    color: '#21479B',
+    color: '#183C98',
     fontWeight: '800',
   },
   detailCard: {
@@ -1302,7 +1697,7 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#183C98',
   },
   modalOverlay: {
     flex: 1,
@@ -1335,7 +1730,7 @@ const styles = StyleSheet.create({
   modalOptionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#21479B',
+    color: '#183C98',
   },
   modalCancel: {
     marginTop: 16,

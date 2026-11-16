@@ -87,7 +87,7 @@ export default function BottomNavigation({
       >
         <MaterialCommunityIcons
           name={currentRoute === 'Plans' ? 'crown' : 'crown-outline'}
-          size={20}
+          size={24}
           color={color('Plans')}
         />
       </Tab>
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 56,
     borderRadius: 22,
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
     alignItems: 'center',
     justifyContent: 'center',
   },

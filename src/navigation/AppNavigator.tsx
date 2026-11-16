@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
@@ -33,17 +32,23 @@ import PrivateExploreScreen from '../screens/private/PrivateExploreScreen';
 import PrivateServicesScreen from '../screens/private/PrivateServicesScreen';
 import PrivatePlansScreen from '../screens/private/PrivatePlansScreen';
 import PrivateMyPlanScreen from '../screens/private/PrivateMyPlanScreen';
+import PrivateChangePlanScreen from '../screens/private/PrivateChangePlanScreen';
+import { PLAN_NAMES, getCyclePrice, getPlanId, type ServiceId, type PlanId } from '../data/planCoverage';
 import PrivateManagePlanScreen from '../screens/private/PrivateManagePlanScreen';
 import PrivateInvoicesScreen from '../screens/private/PrivateInvoicesScreen';
 import PrivateBenefitsScreen from '../screens/private/PrivateBenefitsScreen';
 import PrivatePersonalDataScreen from '../screens/private/PrivatePersonalDataScreen';
 import PrivatePaymentMethodsScreen from '../screens/private/PrivatePaymentMethodsScreen';
+import type { SavedCard } from '../screens/private/PrivatePaymentMethodsScreen';
 import PrivatePetsFlowScreen from '../screens/private/PrivatePetsFlowScreen';
 import type { Pet } from '../screens/private/PrivatePetsFlowScreen';
 import PrivateConsultationsScreen from '../screens/private/PrivateConsultationsScreen';
+import type { ConsultationAppointment } from '../screens/private/PrivateConsultationsScreen';
 import PrivateNotificationsScreen from '../screens/private/PrivateNotificationsScreen';
+import type { NotificationPrefs } from '../screens/private/PrivateNotificationsScreen';
 import PrivateSecurityScreen from '../screens/private/PrivateSecurityScreen';
 import PrivateHelpSupportScreen from '../screens/private/PrivateHelpSupportScreen';
+import PrivateTermsScreen from '../screens/private/PrivateTermsScreen';
 
 // Rotas
 type Screen =
@@ -70,6 +75,7 @@ type Screen =
   | 'PrivateServices'
   | 'PrivatePlans'
   | 'PrivateMyPlan'
+  | 'PrivateChangePlan'
   | 'PrivateManagePlan'
   | 'PrivateInvoices'
   | 'PrivateBenefits'
@@ -79,7 +85,10 @@ type Screen =
   | 'PrivateConsultations'
   | 'PrivateNotifications'
   | 'PrivateSecurity'
-  | 'PrivateHelpSupport';
+  | 'PrivateHelpSupport'
+  | 'PrivateTerms'
+  | 'PublicHelp'
+  | 'PublicTerms';
 
 // Dados da assinatura
 type PlanSubscription = {
@@ -92,6 +101,15 @@ type PlanSubscription = {
   totalPrice: number;
   installments: number;
   status: 'paid' | 'pending';
+  cardLast4?: string;
+  startedAt?: string;
+  // Troca para um plano menor, agendada para a próxima renovação.
+  scheduledChange?: {
+    planId: string;
+    planName: string;
+    billingCycle: 'monthly' | 'yearly';
+    effectiveDate: string;
+  } | null;
 };
 
 // Dados das faturas
@@ -115,6 +133,19 @@ export default function AppNavigator() {
   const [userEmail, setUserEmail] = useState('jadi.borges@email.com');
   const [userPhone, setUserPhone] = useState('(11) 98765-4321');
   const [userCpf, setUserCpf] = useState('123.456.789-00');
+  const [userBirthDate, setUserBirthDate] = useState('');
+
+  // Preferências de notificação
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>({
+    consultas: true,
+    vacinas: true,
+    ofertas: false,
+  });
+
+  // Cartões salvos (só os 4 últimos números)
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([
+    { id: 'card-demo', brand: 'Visa', last4: '8890', holder: 'JADI BORGES', expiry: '09/29', isMain: true },
+  ]);
 
   // Lista compartilhada de pets
   const [userPets, setUserPets] = useState<Pet[]>([]);
@@ -125,6 +156,41 @@ export default function AppNavigator() {
 
   // Faturas
   const [invoices] = useState<Invoice[]>([]);
+
+  // Pet escolhido ao abrir Contratar Plano a partir de Meus Pets
+  const [contractPetId, setContractPetId] = useState<string | null>(null);
+  // Plano escolhido ao tocar num banner
+  const [contractPlanId, setContractPlanId] = useState<string | null>(null);
+
+  // Agendamento aberto a partir de Serviços ou Meu Plano
+  const [bookingIntent, setBookingIntent] = useState<{
+    petId: string;
+    serviceId?: ServiceId;
+  } | null>(null);
+
+  const openConsultations = (intent: { petId: string; serviceId?: ServiceId } | null = null) => {
+    setBookingIntent(intent);
+    push('PrivateConsultations');
+  };
+
+  // Pet escolhido para a tela Mudar de plano
+  const [changePlanPetId, setChangePlanPetId] = useState<string | null>(null);
+  const [changePlanPreset, setChangePlanPreset] = useState<{
+    planId: PlanId;
+    cycle: 'monthly' | 'yearly';
+  } | null>(null);
+
+  const openChangePlan = (
+    petId: string,
+    preset: { planId: PlanId; cycle: 'monthly' | 'yearly' } | null = null,
+  ) => {
+    setChangePlanPetId(petId);
+    setChangePlanPreset(preset);
+    push('PrivateChangePlan');
+  };
+
+  // Consultas agendadas (compartilhadas entre as telas)
+  const [appointments, setAppointments] = useState<ConsultationAppointment[]>([]);
 
   const currentScreen = stack[stack.length - 1];
 
@@ -142,6 +208,35 @@ export default function AppNavigator() {
       prev.length > 1 ? prev.slice(0, -1) : prev,
     );
   }, []);
+
+  // Volta para a tela anterior. Se não houver (aberta pela barra inferior),
+  // volta para o Início da área logada.
+  const backOrHome = useCallback(() => {
+    setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['PrivateHome']));
+  }, []);
+
+  // Plano escolhido sem login (regra A2): depois do login, abre o checkout dele.
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
+
+  // Plano aberto na vitrine pública (vindo da Home)
+  const [publicPlanId, setPublicPlanId] = useState<PlanId | undefined>(undefined);
+
+  const choosePlanPublic = (planId: string) => {
+    setPendingPlanId(planId);
+    setStack((prev) => [...prev, 'Login']);
+  };
+
+  // Depois de entrar ou criar conta.
+  const afterAuth = () => {
+    if (pendingPlanId) {
+      setContractPetId(null);
+      setContractPlanId(pendingPlanId);
+      setPendingPlanId(null);
+      setStack(['PrivateHome', 'PrivatePlans']);
+    } else {
+      setStack(['PrivateHome']);
+    }
+  };
 
   const goTo = useCallback((target: 'Login' | 'Register') => {
     setStack((prev) => {
@@ -175,7 +270,10 @@ export default function AppNavigator() {
   // Navegação pública
   const tabs = {
     onNavigateToHome: () => reset('Home'),
-    onNavigateToPlans: () => reset('Plans'),
+    onNavigateToPlans: () => {
+      setPublicPlanId(undefined);
+      reset('Plans');
+    },
     onNavigateToBenefits: () => reset('Benefits'),
     onNavigateToProfile: () => reset('Profile'),
   };
@@ -186,6 +284,8 @@ export default function AppNavigator() {
     onNavigateToExplore: () => reset('PrivateExplore'),
 
     onNavigateToPlans: () => {
+      setContractPetId(null);
+      setContractPlanId(null);
       reset(planSubscription ? 'PrivateMyPlan' : 'PrivatePlans');
     },
 
@@ -210,8 +310,13 @@ export default function AppNavigator() {
             {...tabs}
             onNavigateToLogin={() => push('Login')}
             onNavigateToRegister={() => push('Register')}
-            onNavigateToServices={() => push('Services')}
-            onNavigateToHowItWorks={() => push('HowItWorks')}
+            onNavigateToServices={() => reset('Plans')}
+            onNavigateToSupport={() => push('PublicHelp')}
+            onChoosePlan={choosePlanPublic}
+            onOpenPlans={(planId) => {
+              setPublicPlanId(planId);
+              push('Plans');
+            }}
           />
         );
 
@@ -220,7 +325,9 @@ export default function AppNavigator() {
           <PlansScreen
             {...tabs}
             onNavigateToLogin={() => push('Login')}
-            onBack={() => reset('Home')}
+            onChoosePlan={choosePlanPublic}
+            initialPlanId={publicPlanId}
+            onBack={() => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['Home']))}
           />
         );
 
@@ -229,7 +336,8 @@ export default function AppNavigator() {
           <BenefitsScreen
             {...tabs}
             onNavigateToLogin={() => push('Login')}
-            onNavigateToPlans={() => reset('Plans')}
+            onNavigateToRegister={() => push('Register')}
+            onChoosePlan={choosePlanPublic}
             onBack={() => reset('Home')}
           />
         );
@@ -240,10 +348,8 @@ export default function AppNavigator() {
             {...tabs}
             onNavigateToLogin={() => push('Login')}
             onNavigateToRegister={() => push('Register')}
-            onNavigateToSupport={() => push('Support')}
-            onNavigateToFaq={() => push('Faq')}
-            onNavigateToTerms={() => push('Terms')}
-            onNavigateToPrivacy={() => push('Privacy')}
+            onNavigateToSupport={() => push('PublicHelp')}
+            onNavigateToTerms={() => push('PublicTerms')}
             onBack={() => reset('Home')}
           />
         );
@@ -285,7 +391,7 @@ export default function AppNavigator() {
         return (
           <LoginScreen
             onBack={back}
-            onLoginSuccess={() => reset('PrivateHome')}
+            onLoginSuccess={afterAuth}
             onNavigateToRegister={() => goTo('Register')}
             onNavigateToForgotPassword={() => push('ForgotPassword')}
             onNavigateToTerms={() => push('Terms')}
@@ -302,7 +408,8 @@ export default function AppNavigator() {
               setRegisteredEmails((prev) => [...prev, email])
             }
             onNavigateToLogin={() => goTo('Login')}
-            onNavigateToTerms={() => push('Terms')}
+            onRegisterSuccess={afterAuth}
+            onNavigateToTerms={() => push('PublicTerms')}
             onNavigateToPrivacy={() => push('Privacy')}
           />
         );
@@ -354,7 +461,7 @@ export default function AppNavigator() {
             onNavigateToServices={() => push('PrivateServices')}
             onNavigateToSupport={() => push('PrivateHelpSupport')}
             onNavigateToPets={() => push('PrivatePetsFlow')}
-            onNavigateToConsultations={() => push('PrivateConsultations')}
+            onNavigateToConsultations={() => openConsultations()}
             onNavigateToPersonalData={() => push('PrivatePersonalData')}
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
             onNavigateToNotifications={() => push('PrivateNotifications')}
@@ -363,6 +470,22 @@ export default function AppNavigator() {
             profileImage={profileImage}
             userName={userName}
             userEmail={userEmail}
+            pets={userPets}
+            subscription={planSubscription}
+            appointments={appointments}
+            onOpenPlan={(planId) => {
+              setContractPetId(null);
+              setContractPlanId(planId);
+              push('PrivatePlans');
+            }}
+            upcomingCount={appointments.filter((item) => item.status === 'scheduled' && item.date >= new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)).length}
+            onNavigateToTerms={() => push('PrivateTerms')}
+            onNavigateToMyPlan={() => reset('PrivateMyPlan')}
+            onContractPlan={(petId) => {
+              setContractPetId(petId);
+              setContractPlanId(null);
+              push('PrivatePlans');
+            }}
           />
         );
 
@@ -376,10 +499,16 @@ export default function AppNavigator() {
             onNavigateToPersonalData={() => push('PrivatePersonalData')}
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
             onNavigateToPets={() => push('PrivatePetsFlow')}
-            onNavigateToConsultations={() => push('PrivateConsultations')}
+            onNavigateToConsultations={() => openConsultations()}
             onNavigateToNotifications={() => push('PrivateNotifications')}
             onNavigateToSecurity={() => push('PrivateSecurity')}
             onNavigateToHelp={() => push('PrivateHelpSupport')}
+            onNavigateToMyPlan={() => reset('PrivateMyPlan')}
+            onNavigateToTerms={() => push('PrivateTerms')}
+            onBack={backOrHome}
+            petsCount={userPets.length}
+            activePlans={userPets.filter((pet) => pet.hasActivePlan).length}
+            upcomingCount={appointments.filter((item) => item.status === 'scheduled' && item.date >= new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)).length}
             onLogout={() => reset('Home')}
           />
         );
@@ -394,6 +523,9 @@ export default function AppNavigator() {
           <PrivateServicesScreen
             {...privateTabs}
             onBack={back}
+            pets={userPets}
+            onNavigateToAddPet={() => push('PrivatePetsFlow')}
+            onSelectService={(petId, serviceId) => openConsultations({ petId, serviceId })}
           />
         );
 
@@ -402,9 +534,15 @@ export default function AppNavigator() {
         return (
           <PrivatePlansScreen
             {...privateTabs}
+            onBack={backOrHome}
             pets={userPets}
+            initialPetId={contractPetId}
+            initialPlanId={contractPlanId}
             onPurchaseComplete={(subscription) => {
-              setPlanSubscription(subscription);
+              setPlanSubscription({
+                ...subscription,
+                startedAt: new Date().toISOString(),
+              });
 
               if (subscription.status === 'paid') {
                 setUserPets((previousPets) =>
@@ -430,17 +568,106 @@ export default function AppNavigator() {
         return (
           <PrivateMyPlanScreen
             {...privateTabs}
-            onBack={back}
+            onBack={backOrHome}
             onNavigateToPlans={() => reset('PrivatePlans')}
             onNavigateToManagePlan={() => push('PrivateManagePlan')}
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
             onNavigateToInvoices={() => push('PrivateInvoices')}
             onNavigateToPets={() => push('PrivatePetsFlow')}
+            onNavigateToSchedule={(petId) => openConsultations({ petId, serviceId: 'consulta' })}
+            onNavigateToChangePlan={(petId) => openChangePlan(petId)}
+            onCancelSubscription={() => {
+              Alert.alert(
+                'Cancelamento',
+                'A solicitação de cancelamento ainda precisa ser conectada ao backend.',
+              );
+            }}
             subscription={planSubscription}
             invoices={invoices}
+            appointments={appointments}
             pets={userPets}
           />
         );
+
+      // Mudar de plano
+      case 'PrivateChangePlan': {
+        const pet = userPets.find((item) => item.id === changePlanPetId);
+        if (!pet) return null;
+
+        const details =
+          planSubscription &&
+          planSubscription.petName.trim().toLowerCase() === pet.name.trim().toLowerCase()
+            ? planSubscription
+            : null;
+
+        return (
+          <PrivateChangePlanScreen
+            pet={pet}
+            currentCycle={details?.billingCycle}
+            paymentMethod={details?.paymentMethod}
+            startedAt={details?.startedAt}
+            initialPlanId={changePlanPreset?.planId}
+            initialCycle={changePlanPreset?.cycle}
+            onBack={back}
+            onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
+            onConfirm={(result) => {
+              const planName = PLAN_NAMES[result.planId];
+              const base: PlanSubscription = details ?? {
+                petId: pet.id,
+                planId: getPlanId(pet.plan) ?? result.planId,
+                planName: pet.plan ?? planName,
+                petName: pet.name,
+                billingCycle: 'monthly',
+                paymentMethod: 'card',
+                totalPrice: getCyclePrice(getPlanId(pet.plan) ?? result.planId, 'monthly'),
+                installments: 1,
+                status: 'paid',
+                startedAt: new Date().toISOString(),
+              };
+
+              if (result.appliesNow) {
+                // Upgrade: vale hoje.
+                setUserPets((previous) =>
+                  previous.map((item) =>
+                    item.id === pet.id ? { ...item, plan: planName, hasActivePlan: true } : item,
+                  ),
+                );
+                setPlanSubscription({
+                  ...base,
+                  planId: result.planId,
+                  planName,
+                  billingCycle: result.billingCycle,
+                  totalPrice: getCyclePrice(result.planId, result.billingCycle),
+                  installments: 1,
+                  startedAt:
+                    result.billingCycle !== base.billingCycle
+                      ? new Date().toISOString()
+                      : base.startedAt,
+                  scheduledChange: null,
+                });
+                back();
+                Alert.alert('Plano alterado', `${pet.name} agora tem o ${planName}.`);
+              } else {
+                // Plano menor ou troca de ciclo: vale na próxima renovação.
+                setPlanSubscription({
+                  ...base,
+                  scheduledChange: {
+                    planId: result.planId,
+                    planName,
+                    billingCycle: result.billingCycle,
+                    effectiveDate: result.effectiveDate,
+                  },
+                });
+                back();
+                Alert.alert(
+                  'Mudança agendada',
+                  `${pet.name} passa para o ${planName} em ${new Date(result.effectiveDate).toLocaleDateString('pt-BR')}.`,
+                );
+              }
+            }}
+          />
+        );
+      }
 
       // Gerenciar Plano
       case 'PrivateManagePlan':
@@ -448,17 +675,10 @@ export default function AppNavigator() {
           <PrivateManagePlanScreen
             {...privateTabs}
             onBack={back}
-            onNavigateToPlans={() => reset('PrivatePlans')}
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
+            onNavigateToChangePlan={(petId, preset) => openChangePlan(petId, preset ?? null)}
             subscription={planSubscription}
-            onChangeBillingCycle={(cycle) => {
-              Alert.alert(
-                'Alteração de cobrança',
-                `O ciclo selecionado foi ${
-                  cycle === 'yearly' ? 'anual' : 'mensal'
-                }. A confirmação da alteração deverá ser feita no fluxo de pagamento.`,
-              );
-            }}
+            pets={userPets}
             onCancelSubscription={() => {
               Alert.alert(
                 'Cancelamento',
@@ -492,7 +712,26 @@ export default function AppNavigator() {
 
       case 'PrivateBenefits':
         return (
-          <PrivateBenefitsScreen {...privateTabs} />
+          <PrivateBenefitsScreen
+            {...privateTabs}
+            onBack={backOrHome}
+            pets={userPets}
+            appointments={appointments}
+            onNavigateToAddPet={() => push('PrivatePetsFlow')}
+            onSchedule={(petId) => openConsultations({ petId })}
+            onContractPlan={(petId, planId) => {
+              setContractPetId(petId);
+              setContractPlanId(planId);
+              push('PrivatePlans');
+            }}
+            onChangePlan={(petId, planId) => {
+              const cycle =
+                planSubscription && planSubscription.petId === petId
+                  ? planSubscription.billingCycle
+                  : 'monthly';
+              openChangePlan(petId, { planId, cycle });
+            }}
+          />
         );
 
       // Subtelas do perfil privado
@@ -511,6 +750,8 @@ export default function AppNavigator() {
             setUserPhone={setUserPhone}
             userCpf={userCpf}
             setUserCpf={setUserCpf}
+            userBirthDate={userBirthDate}
+            setUserBirthDate={setUserBirthDate}
           />
         );
 
@@ -519,6 +760,9 @@ export default function AppNavigator() {
           <PrivatePaymentMethodsScreen
             {...privateTabs}
             onBack={back}
+            cards={savedCards}
+            onCardsChange={setSavedCards}
+            hasActivePlan={userPets.some((pet) => pet.hasActivePlan)}
           />
         );
 
@@ -529,6 +773,11 @@ export default function AppNavigator() {
             onBack={back}
             pets={userPets}
             onPetsChange={setUserPets}
+            onContractPlan={(petId) => {
+              setContractPetId(petId);
+              setContractPlanId(null);
+              push('PrivatePlans');
+            }}
           />
         );
 
@@ -537,6 +786,17 @@ export default function AppNavigator() {
           <PrivateConsultationsScreen
             {...privateTabs}
             onBack={back}
+            pets={userPets}
+            appointments={appointments}
+            onAppointmentsChange={setAppointments}
+            initialPetId={bookingIntent?.petId}
+            initialServiceId={bookingIntent?.serviceId}
+            openServiceChoice={!!bookingIntent && !bookingIntent.serviceId}
+            onContractPlan={(petId) => {
+              setContractPetId(petId);
+              setContractPlanId(null);
+              push('PrivatePlans');
+            }}
           />
         );
 
@@ -545,6 +805,13 @@ export default function AppNavigator() {
           <PrivateNotificationsScreen
             {...privateTabs}
             onBack={back}
+            pets={userPets}
+            appointments={appointments}
+            subscription={planSubscription}
+            prefs={notificationPrefs}
+            onPrefsChange={setNotificationPrefs}
+            onOpenConsultations={() => openConsultations()}
+            onOpenMyPlan={() => reset('PrivateMyPlan')}
           />
         );
 
@@ -553,6 +820,17 @@ export default function AppNavigator() {
           <PrivateSecurityScreen
             {...privateTabs}
             onBack={back}
+            onDeleteAccount={() => {
+              // Regra N11: cancela os planos e apaga os dados.
+              setUserPets([]);
+              setPlanSubscription(null);
+              setAppointments([]);
+              setSavedCards([]);
+              setProfileImage(null);
+              setUserBirthDate('');
+              reset('Home');
+              Alert.alert('Conta excluída', 'Seus dados foram apagados. Esperamos ver você de novo.');
+            }}
           />
         );
 
@@ -561,6 +839,36 @@ export default function AppNavigator() {
           <PrivateHelpSupportScreen
             {...privateTabs}
             onBack={back}
+            onNavigateToTerms={() => push('PrivateTerms')}
+          />
+        );
+
+      // Termos abertos de dentro da conta (sem a barra pública)
+      case 'PrivateTerms':
+        return (
+          <PrivateTermsScreen
+            {...privateTabs}
+            onBack={backOrHome}
+            onNavigateToHelp={() => push('PrivateHelpSupport')}
+          />
+        );
+
+      // Ajuda e Termos abertos sem login (com a barra pública)
+      case 'PublicHelp':
+        return (
+          <PrivateHelpSupportScreen
+            {...tabs}
+            onBack={back}
+            onNavigateToTerms={() => push('PublicTerms')}
+          />
+        );
+
+      case 'PublicTerms':
+        return (
+          <PrivateTermsScreen
+            {...tabs}
+            onBack={back}
+            onNavigateToHelp={() => push('PublicHelp')}
           />
         );
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,12 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import { getSpeciesIcon } from '../../components/PetAvatar';
+import PrivateHeader from '../../components/PrivateHeader';
+import { theme } from '../../theme/privateTheme';
+import { PLAN_FEATURES, PLAN_NAMES, PLAN_ORDER, type PlanId } from '../../data/planCoverage';
 import type { Pet } from './PrivatePetsFlowScreen';
 
 type Step = 'showcase' | 'details' | 'payment' | 'loading' | 'success';
@@ -42,6 +46,7 @@ interface SubscriptionData {
   totalPrice: number;
   installments: number;
   status: PaymentStatus;
+  cardLast4?: string; // só os 4 últimos dígitos do cartão
 }
 
 interface Props {
@@ -54,137 +59,52 @@ interface Props {
   onNavigateToProfile?: () => void;
   onNavigateToAddPet?: () => void;
   pets: Pet[];
+  initialPetId?: string | null; // pet já escolhido ao abrir (ex.: vindo de Meus Pets)
+  initialPlanId?: string | null; // plano já escolhido ao abrir (ex.: tocando num banner)
   onPurchaseComplete?: (data: SubscriptionData) => void;
 }
 
 const INTEREST_RATE = 0.0199;
 
-const plansData: Record<BillingCycle, Plan[]> = {
-  monthly: [
-    {
-      id: 'bronze',
-      tag: 'BÁSICO',
-      title: 'Plano Bronze',
-      price: 139.90,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Atendimento Veterinário Básico', count: '1/mês' },
-      ],
-      extraFeatures: [
-        { text: 'Desconto em Medicamentos', count: '10%' },
-        { text: 'Histórico de Vacinas Digital', count: 'Inclui' },
-      ],
-    },
-    {
-      id: 'prata',
-      tag: 'POPULAR',
-      title: 'Plano Prata',
-      price: 219.90,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Consultas Presenciais', count: 'Limitado' },
-      ],
-      extraFeatures: [
-        { text: 'Vacinas Anuais Inclusas', count: 'Todas' },
-        { text: 'Desconto em Medicamentos', count: '15%' },
-        { text: 'Atendimento de Emergência', count: '24h' },
-      ],
-    },
-    {
-      id: 'ouro',
-      tag: 'MAIS COMPLETO',
-      title: 'Plano Ouro',
-      price: 399.90,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Exames de rotina', count: '2/mês' },
-      ],
-      extraFeatures: [
-        { text: 'Consultas Presenciais Ilimitadas', count: 'Sim' },
-        { text: 'Leva & Traz Pet', count: '2/mês' },
-        { text: 'Rede Credenciada VIP', count: 'Sim' },
-        { text: 'Desconto em Medicamentos', count: '20%' },
-      ],
-    },
-    {
-      id: 'diamante',
-      tag: 'VIP',
-      title: 'Plano Diamante',
-      price: 649.90,
-      features: [
-        { text: 'Consultas Presenciais', count: 'Ilimitadas' },
-        { text: 'Exames e Cirurgias', count: 'Inclusos' },
-      ],
-      extraFeatures: [
-        { text: 'Leva & Traz Pet Ilimitado', count: 'Sim' },
-        { text: 'Hospedagem e Creche', count: '3 dias/mês' },
-        { text: 'Especialistas e Odontologia', count: 'Incluso' },
-      ],
-    },
-  ],
+// Modo de teste: Pix e boleto mostram uma tela de carregamento
+// e depois ativam o plano automaticamente.
+// Para mudar o tempo de espera, altere o valor abaixo (em milissegundos).
+const PIX_BOLETO_TEST_DELAY_MS = 5000;
 
-  yearly: [
-    {
-      id: 'bronze',
-      tag: 'BÁSICO',
-      title: 'Plano Bronze',
-      price: 125.91,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Atendimento Veterinário Básico', count: '1/mês' },
-      ],
-      extraFeatures: [
-        { text: 'Desconto em Medicamentos', count: '10%' },
-        { text: 'Histórico de Vacinas Digital', count: 'Inclui' },
-      ],
-    },
-    {
-      id: 'prata',
-      tag: 'POPULAR',
-      title: 'Plano Prata',
-      price: 197.91,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Consultas Presenciais', count: 'Limitado' },
-      ],
-      extraFeatures: [
-        { text: 'Vacinas Anuais Inclusas', count: 'Todas' },
-        { text: 'Desconto em Medicamentos', count: '15%' },
-        { text: 'Atendimento de Emergência', count: '24h' },
-      ],
-    },
-    {
-      id: 'ouro',
-      tag: 'MAIS COMPLETO',
-      title: 'Plano Ouro',
-      price: 359.91,
-      features: [
-        { text: 'Banho e Tosa', count: '2/mês' },
-        { text: 'Exames de rotina', count: '2/mês' },
-      ],
-      extraFeatures: [
-        { text: 'Consultas Presenciais Ilimitadas', count: 'Sim' },
-        { text: 'Leva & Traz Pet', count: '2/mês' },
-        { text: 'Rede Credenciada VIP', count: 'Sim' },
-        { text: 'Desconto em Medicamentos', count: '20%' },
-      ],
-    },
-    {
-      id: 'diamante',
-      tag: 'VIP',
-      title: 'Plano Diamante',
-      price: 584.91,
-      features: [
-        { text: 'Consultas Presenciais', count: 'Ilimitadas' },
-        { text: 'Exames e Cirurgias', count: 'Inclusos' },
-      ],
-      extraFeatures: [
-        { text: 'Leva & Traz Pet Ilimitado', count: 'Sim' },
-        { text: 'Hospedagem e Creche', count: '3 dias/mês' },
-        { text: 'Especialistas e Odontologia', count: 'Incluso' },
-      ],
-    },
-  ],
+// Conteúdo de cada plano: vem de src/data/planCoverage.ts (PLAN_FEATURES),
+// o mesmo usado na aba Benefícios. Os 2 primeiros itens aparecem em destaque.
+const PLAN_TAGS: Record<PlanId, string> = {
+  bronze: 'BÁSICO',
+  prata: 'POPULAR',
+  ouro: 'MAIS COMPLETO',
+  diamante: 'VIP',
+};
+
+const PLAN_BASE: Omit<Plan, 'price'>[] = PLAN_ORDER.map((id) => ({
+  id,
+  tag: PLAN_TAGS[id],
+  title: PLAN_NAMES[id],
+  features: PLAN_FEATURES[id].slice(0, 2),
+  extraFeatures: PLAN_FEATURES[id].slice(2),
+}));
+
+// Preços por mês, iguais aos banners.
+const PLAN_PRICE_TABLE: Record<BillingCycle, Record<string, number>> = {
+  monthly: { bronze: 139.9, prata: 219.9, ouro: 399.9, diamante: 649.9 },
+  yearly: { bronze: 119.9, prata: 179.9, ouro: 349.9, diamante: 549.9 },
+};
+
+// Cor do fundinho da coroa e frase curta de cada plano na vitrine.
+const PLAN_TIER_STYLE: Record<PlanId, { color: string; summary: string }> = {
+  bronze: { color: '#B87333', summary: 'Banho e tosa + atendimento básico' },
+  prata: { color: '#A3ADBC', summary: '+ vacinas e 2 consultas' },
+  ouro: { color: '#E3A912', summary: '+ exames e consultas ilimitadas' },
+  diamante: { color: '#4FB3D9', summary: '+ leva e traz ilimitado' },
+};
+
+const plansData: Record<BillingCycle, Plan[]> = {
+  monthly: PLAN_BASE.map((plan) => ({ ...plan, price: PLAN_PRICE_TABLE.monthly[plan.id] })),
+  yearly: PLAN_BASE.map((plan) => ({ ...plan, price: PLAN_PRICE_TABLE.yearly[plan.id] })),
 };
 
 const formatCurrency = (value: number) =>
@@ -203,13 +123,16 @@ export default function PrivatePlansScreen({
   onNavigateToProfile,
   onNavigateToAddPet,
   pets,
+  initialPetId,
+  initialPlanId,
   onPurchaseComplete,
 }: Props) {
-  const [step, setStep] = useState<Step>('showcase');
+  // Vindo de um banner, abre direto nos detalhes do plano escolhido.
+  const [step, setStep] = useState<Step>(initialPlanId && pets.length > 0 ? 'details' : 'showcase');
   const [billingCycle, setBillingCycle] =
     useState<BillingCycle>('monthly');
 
-  const [selectedPlanId, setSelectedPlanId] = useState('ouro');
+  const [selectedPlanId, setSelectedPlanId] = useState(initialPlanId ?? 'ouro');
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>('card');
 
@@ -229,10 +152,23 @@ export default function PrivatePlansScreen({
   const userPets = pets;
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(
-    pets.length > 0 ? pets[0].id : null
+    initialPetId && pets.some((pet) => pet.id === initialPetId)
+      ? initialPetId
+      : pets.length > 0
+        ? pets[0].id
+        : null
   );
 
   const [petListExpanded, setPetListExpanded] = useState(false);
+
+  const confirmationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancela a espera se a pessoa sair da tela antes de terminar.
+  useEffect(() => {
+    return () => {
+      if (confirmationTimer.current) clearTimeout(confirmationTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedPetId && pets.length > 0) {
@@ -265,7 +201,8 @@ export default function PrivatePlansScreen({
   // Sem foto, mostra exclusivamente o ícone de patinha.
   const renderPetAvatar = (
     avatar: string | null,
-    checkout = false
+    checkout = false,
+    species?: string | null
   ) => {
     const avatarStyle = checkout
       ? styles.checkoutPetAvatar
@@ -293,10 +230,10 @@ export default function PrivatePlansScreen({
 
     return (
       <View style={[avatarStyle, styles.petAvatarPlaceholder]}>
-        <Ionicons
-          name="paw"
-          size={checkout ? 27 : 25}
-          color="#21479B"
+        <MaterialCommunityIcons
+          name={getSpeciesIcon(species)}
+          size={checkout ? 28 : 26}
+          color="#183C98"
         />
       </View>
     );
@@ -331,6 +268,21 @@ export default function PrivatePlansScreen({
       : totalPrice;
 
   const formattedInstallment = formatCurrency(installmentValue);
+
+  // Na vitrine, qual plano está com a lista completa aberta.
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+
+  // Da vitrine para os detalhes: precisa ter pet cadastrado.
+  const handleContinueToDetails = () => {
+    if (!userPets.length) {
+      Alert.alert('Cadastre seu pet', 'Cadastre um pet antes de contratar um plano.', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cadastrar pet', onPress: onNavigateToAddPet },
+      ]);
+      return;
+    }
+    setStep('details');
+  };
 
   const changeBillingCycle = (cycle: BillingCycle) => {
     setBillingCycle(cycle);
@@ -409,10 +361,8 @@ export default function PrivatePlansScreen({
       return;
     }
 
-    // Cartão: aprovação simulada neste protótipo.
-    // Pix e boleto ficam pendentes até a confirmação do gateway.
-    const nextStatus: PaymentStatus =
-      paymentMethod === 'card' ? 'paid' : 'pending';
+    // Modo de teste: cartão, Pix e boleto ativam o plano.
+    const nextStatus: PaymentStatus = 'paid';
 
     setPaymentStatus(nextStatus);
 
@@ -424,6 +374,10 @@ export default function PrivatePlansScreen({
       billingCycle,
       paymentMethod,
       totalPrice: finalPaymentTotal,
+      cardLast4:
+        paymentMethod === 'card'
+          ? cardNumber.replace(/\D/g, '').slice(-4)
+          : undefined,
       installments:
         paymentMethod === 'card' && billingCycle === 'yearly'
           ? installments
@@ -431,8 +385,18 @@ export default function PrivatePlansScreen({
       status: nextStatus,
     };
 
-    onPurchaseComplete?.(subscription);
-    setStep('success');
+    if (paymentMethod === 'card') {
+      onPurchaseComplete?.(subscription);
+      setStep('success');
+      return;
+    }
+
+    // Pix e boleto: simula a espera pela confirmação do pagamento.
+    setStep('loading');
+    confirmationTimer.current = setTimeout(() => {
+      onPurchaseComplete?.(subscription);
+      setStep('success');
+    }, PIX_BOLETO_TEST_DELAY_MS);
   };
 
   // Seleção de pet em formato expansível.
@@ -447,7 +411,7 @@ export default function PrivatePlansScreen({
           <Ionicons
             name="add-circle-outline"
             size={28}
-            color="#21479B"
+            color="#183C98"
           />
 
           <View style={styles.petInfo}>
@@ -485,7 +449,7 @@ export default function PrivatePlansScreen({
           activeOpacity={userPets.length > 1 ? 0.8 : 1}
         >
           <View style={styles.petDropdownSelected}>
-            {renderPetAvatar(selectedPet.avatar)}
+            {renderPetAvatar(selectedPet.avatar, false, selectedPet.species)}
 
             <View style={styles.petInfo}>
               <Text style={styles.petName}>
@@ -510,7 +474,7 @@ export default function PrivatePlansScreen({
                   : 'chevron-down'
               }
               size={23}
-              color="#21479B"
+              color="#183C98"
             />
           )}
         </TouchableOpacity>
@@ -529,7 +493,7 @@ export default function PrivatePlansScreen({
                   }}
                   activeOpacity={0.85}
                 >
-                  {renderPetAvatar(pet.avatar)}
+                  {renderPetAvatar(pet.avatar, false, pet.species)}
 
                   <View style={styles.petInfo}>
                     <Text style={styles.petName}>
@@ -593,7 +557,7 @@ export default function PrivatePlansScreen({
               installmentsOpen ? 'chevron-up' : 'chevron-down'
             }
             size={21}
-            color="#21479B"
+            color="#183C98"
           />
         </TouchableOpacity>
 
@@ -691,37 +655,20 @@ export default function PrivatePlansScreen({
   );
     return (
     <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor="#FFFFFF"
+      <PrivateHeader
+        title={
+          step === 'showcase'
+            ? 'Contratar plano'
+            : step === 'details'
+              ? 'Detalhes do plano'
+              : step === 'payment'
+                ? 'Pagamento'
+                : step === 'loading'
+                  ? 'Confirmando pagamento'
+                  : 'Pagamento concluído'
+        }
+        onBack={step !== 'success' && step !== 'loading' ? handleBack : undefined}
       />
-
-      <View style={styles.header}>
-        {step !== 'success' ? (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={handleBack}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={24}
-              color="#21479B"
-            />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.backButton} />
-        )}
-
-        <Text style={styles.headerTitle}>
-          {step === 'showcase' && 'Contratar Plano'}
-          {step === 'details' && 'Detalhes do Plano'}
-          {step === 'payment' && 'Pagamento'}
-          {step === 'loading' && 'Preparando contratação'}
-          {step === 'success' && 'Pagamento concluído'}
-        </Text>
-
-        <View style={styles.backButton} />
-      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -733,126 +680,140 @@ export default function PrivatePlansScreen({
         {/* VITRINE DE PLANOS */}
         {step === 'showcase' && (
           <>
-            <View style={styles.tabContainer}>
-              {(['monthly', 'yearly'] as BillingCycle[]).map(
-                (cycle) => (
-                  <TouchableOpacity
-                    key={cycle}
-                    style={[
-                      styles.tabButton,
-                      billingCycle === cycle &&
-                        styles.tabButtonActive,
-                    ]}
-                    onPress={() => changeBillingCycle(cycle)}
-                  >
-                    <Text
-                      style={[
-                        styles.tabText,
-                        billingCycle === cycle &&
-                          styles.tabTextActive,
-                      ]}
-                    >
-                      {cycle === 'monthly'
-                        ? 'Mensal'
-                        : 'Anual · 10% OFF'}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              )}
-            </View>
-
-            <View style={styles.cardsList}>
-              {currentPlans.map((plan) => {
-                const selected = selectedPlanId === plan.id;
-                const recommended = plan.id === 'ouro';
-
-                const features = selected
-                  ? [...plan.features, ...plan.extraFeatures]
-                  : plan.features;
-
-                return (
-                  <View
-                    key={plan.id}
-                    style={[
-                      styles.card,
-                      selected && styles.selectedCard,
-                    ]}
-                  >
-                    <View style={styles.cardTopRow}>
-                      <Text style={styles.cardTag}>
-                        {plan.tag}
-                      </Text>
-
-                      {recommended && (
-                        <View style={styles.recommendedBadge}>
-                          <Ionicons
-                            name="star"
-                            size={11}
-                            color="#315BA8"
-                          />
-
-                          <Text style={styles.recommendedText}>
-                            RECOMENDADO
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.cardHeaderRow}>
-                      <Text style={styles.cardTitle}>
-                        {plan.title}
-                      </Text>
-
-                      <View style={styles.priceContainer}>
-                        <Text style={styles.cardPrice}>
-                          {formatCurrency(plan.price)}
-                        </Text>
-
-                        <Text style={styles.cardPeriod}>
-                          /mês
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.featuresList}>
-                      {features.map((feature, index) => (
-                        <View
-                          key={index}
-                          style={styles.featureItem}
-                        >
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={16}
-                            color="#10B981"
-                          />
-
-                          <Text style={styles.featureText}>
-                            {feature.text}
-                          </Text>
-
-                          <Text style={styles.featureCount}>
-                            {feature.count}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-
+            {/* Para qual pet */}
+            {userPets.length === 0 ? (
+              <TouchableOpacity style={styles.vtPetLine} onPress={onNavigateToAddPet} activeOpacity={0.8}>
+                <View style={styles.vtPetIcon}>
+                  <Ionicons name="paw" size={16} color={theme.colors.primary} />
+                </View>
+                <Text style={styles.vtPetText}>Cadastre um pet para contratar</Text>
+                <Text style={styles.vtLink}>Adicionar</Text>
+              </TouchableOpacity>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vtPetList}>
+                {userPets.map((pet) => {
+                  const active = pet.id === selectedPet?.id;
+                  return (
                     <TouchableOpacity
-                      style={styles.primaryButton}
-                      onPress={() => {
-                        setSelectedPlanId(plan.id);
-                        setStep('details');
-                      }}
-                      activeOpacity={0.85}
+                      key={pet.id}
+                      style={[styles.vtPetPill, active && styles.vtPetPillActive]}
+                      onPress={() => setSelectedPetId(pet.id)}
+                      activeOpacity={0.8}
                     >
-                      <Text style={styles.primaryButtonText}>
-                        CONTRATAR
+                      <View style={[styles.vtPetIcon, active && { backgroundColor: '#FFFFFF' }]}>
+                        {pet.avatar ? (
+                          <Image source={{ uri: pet.avatar }} style={styles.vtPetPhoto} />
+                        ) : (
+                          <MaterialCommunityIcons name={getSpeciesIcon(pet.species)} size={17} color={theme.colors.primary} />
+                        )}
+                      </View>
+                      <Text style={styles.vtPetName}>
+                        {active ? 'Plano para ' : ''}
+                        <Text style={{ fontFamily: theme.fonts.bold }}>{pet.name}</Text>
                       </Text>
                     </TouchableOpacity>
-                  </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Mensal / Anual */}
+            <View style={styles.vtToggle}>
+              {(['monthly', 'yearly'] as BillingCycle[]).map((cycle) => {
+                const active = billingCycle === cycle;
+                return (
+                  <TouchableOpacity
+                    key={cycle}
+                    style={[styles.vtToggleOption, active && styles.vtToggleOptionActive]}
+                    onPress={() => changeBillingCycle(cycle)}
+                  >
+                    <Text style={[styles.vtToggleText, active && styles.vtToggleTextActive]}>
+                      {cycle === 'monthly' ? 'Mensal' : 'Anual'}
+                    </Text>
+                    {cycle === 'yearly' && (
+                      <View style={styles.vtSaveBadge}>
+                        <Text style={styles.vtSaveText}>até 18% off</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 );
               })}
             </View>
+
+            {/* Planos: um aberto por vez */}
+            {currentPlans.map((plan) => {
+              const open = selectedPlanId === plan.id;
+              const recommended = plan.id === 'ouro';
+              const allFeatures = [...plan.features, ...plan.extraFeatures];
+              const tier = PLAN_TIER_STYLE[plan.id as PlanId];
+              return (
+                <View key={plan.id} style={[styles.vtCard, open && styles.vtCardOpen]}>
+                  {recommended && (
+                    <View style={styles.vtRibbon}>
+                      <Text style={styles.vtRibbonText}>Mais escolhido</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.vtCardTop}
+                    onPress={() => setSelectedPlanId(plan.id)}
+                    activeOpacity={0.8}
+                  >
+                    {/* Mesma coroa da barra inferior, com o fundo na cor do nível */}
+                    <View style={[styles.vtCrown, { backgroundColor: tier.color }]}>
+                      <MaterialCommunityIcons name="crown" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.vtPlanName}>{plan.title.replace('Plano ', '')}</Text>
+                      <Text style={styles.vtPlanSummary}>{tier.summary}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.vtPrice}>{formatCurrency(plan.price)}</Text>
+                      <Text style={styles.vtPriceUnit}>/mês</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {open && (
+                    <>
+                      <View style={styles.vtFeatures}>
+                        {(expandedPlanId === plan.id ? allFeatures : allFeatures.slice(0, 3)).map((feature) => (
+                          <View key={feature.text} style={styles.vtFeatureRow}>
+                            <Ionicons name="checkmark-circle" size={15} color={theme.colors.success} />
+                            <Text style={styles.vtFeatureText}>{feature.text}</Text>
+                            <Text style={styles.vtFeatureCount}>{feature.count}</Text>
+                          </View>
+                        ))}
+                        {allFeatures.length > 3 && (
+                          <TouchableOpacity
+                            onPress={() => setExpandedPlanId(expandedPlanId === plan.id ? null : plan.id)}
+                          >
+                            <Text style={styles.vtSeeAll}>
+                              {expandedPlanId === plan.id ? 'Ver menos' : `Ver tudo (${allFeatures.length} itens)`}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.vtChooseButton}
+                        onPress={() => {
+                          setSelectedPlanId(plan.id);
+                          handleContinueToDetails();
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.vtChooseText}>
+                          Escolher {plan.title.replace('Plano ', '')} ·{' '}
+                          {billingCycle === 'yearly'
+                            ? `${formatCurrency(plan.price * 12)}/ano`
+                            : `${formatCurrency(plan.price)}/mês`}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              );
+            })}
           </>
         )}
 
@@ -926,14 +887,14 @@ export default function PrivatePlansScreen({
                         <Ionicons
                           name="calendar-outline"
                           size={18}
-                          color="#21479B"
+                          color="#183C98"
                         />
 
                         {billingCycle === cycle && (
                           <Ionicons
                             name="checkmark-circle"
                             size={18}
-                            color="#21479B"
+                            color="#183C98"
                           />
                         )}
                       </View>
@@ -941,7 +902,7 @@ export default function PrivatePlansScreen({
                       <Text style={styles.cycleTitle}>
                         {cycle === 'monthly'
                           ? 'Mensal'
-                          : 'Anual · 10% OFF'}
+                          : 'Anual · até 18% OFF'}
                       </Text>
 
                       <Text style={styles.cyclePrice}>
@@ -967,7 +928,7 @@ export default function PrivatePlansScreen({
                   acceptedTerms ? 'checkbox' : 'square-outline'
                 }
                 size={20}
-                color="#21479B"
+                color="#183C98"
               />
 
               <Text style={styles.termsText}>
@@ -1041,7 +1002,7 @@ export default function PrivatePlansScreen({
           <>
             <View style={styles.checkoutPetCard}>
               {selectedPet &&
-                renderPetAvatar(selectedPet.avatar, true)}
+                renderPetAvatar(selectedPet.avatar, true, selectedPet.species)}
 
               <View style={styles.petInfo}>
                 <Text style={styles.checkoutPetLabel}>
@@ -1074,7 +1035,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name="card-outline"
                   size={23}
-                  color={paymentMethod === 'card' ? '#21479B' : '#64748B'}
+                  color={paymentMethod === 'card' ? '#183C98' : '#64748B'}
                 />
                 <View style={styles.paymentMethodInfo}>
                   <Text style={styles.paymentMethodText}>Cartão de crédito</Text>
@@ -1083,7 +1044,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name={paymentMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
                   size={21}
-                  color={paymentMethod === 'card' ? '#21479B' : '#94A3B8'}
+                  color={paymentMethod === 'card' ? '#183C98' : '#94A3B8'}
                 />
               </TouchableOpacity>
 
@@ -1098,7 +1059,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name="qr-code-outline"
                   size={23}
-                  color={paymentMethod === 'pix' ? '#21479B' : '#64748B'}
+                  color={paymentMethod === 'pix' ? '#183C98' : '#64748B'}
                 />
                 <View style={styles.paymentMethodInfo}>
                   <Text style={styles.paymentMethodText}>Pix</Text>
@@ -1107,7 +1068,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name={paymentMethod === 'pix' ? 'radio-button-on' : 'radio-button-off'}
                   size={21}
-                  color={paymentMethod === 'pix' ? '#21479B' : '#94A3B8'}
+                  color={paymentMethod === 'pix' ? '#183C98' : '#94A3B8'}
                 />
               </TouchableOpacity>
 
@@ -1122,7 +1083,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name="barcode-outline"
                   size={23}
-                  color={paymentMethod === 'boleto' ? '#21479B' : '#64748B'}
+                  color={paymentMethod === 'boleto' ? '#183C98' : '#64748B'}
                 />
                 <View style={styles.paymentMethodInfo}>
                   <Text style={styles.paymentMethodText}>Boleto bancário</Text>
@@ -1131,7 +1092,7 @@ export default function PrivatePlansScreen({
                 <Ionicons
                   name={paymentMethod === 'boleto' ? 'radio-button-on' : 'radio-button-off'}
                   size={21}
-                  color={paymentMethod === 'boleto' ? '#21479B' : '#94A3B8'}
+                  color={paymentMethod === 'boleto' ? '#183C98' : '#94A3B8'}
                 />
               </TouchableOpacity>
             </View>
@@ -1200,7 +1161,7 @@ export default function PrivatePlansScreen({
                       onValueChange={setSaveCard}
                       trackColor={{
                         false: '#CBD5E1',
-                        true: '#21479B',
+                        true: '#183C98',
                       }}
                     />
                   </View>
@@ -1210,7 +1171,7 @@ export default function PrivatePlansScreen({
 
             {paymentMethod === 'pix' && (
               <View style={styles.alternativePaymentInfo}>
-                <Ionicons name="qr-code-outline" size={32} color="#21479B" />
+                <Ionicons name="qr-code-outline" size={32} color="#183C98" />
                 <Text style={styles.alternativePaymentTitle}>Pagamento via Pix</Text>
                 <Text style={styles.alternativePaymentText}>
                   Ao continuar, a solicitação de pagamento Pix ficará aguardando
@@ -1225,7 +1186,7 @@ export default function PrivatePlansScreen({
 
             {paymentMethod === 'boleto' && (
               <View style={styles.alternativePaymentInfo}>
-                <Ionicons name="barcode-outline" size={32} color="#21479B" />
+                <Ionicons name="barcode-outline" size={32} color="#183C98" />
                 <Text style={styles.alternativePaymentTitle}>Pagamento por boleto</Text>
                 <Text style={styles.alternativePaymentText}>
                   Ao continuar, a solicitação do boleto ficará aguardando
@@ -1303,15 +1264,19 @@ export default function PrivatePlansScreen({
           <View style={styles.loadingContainer}>
             <ActivityIndicator
               size="large"
-              color="#21479B"
+              color="#183C98"
             />
 
             <Text style={styles.loadingTitle}>
-              Preparando sua contratação
+              {paymentMethod === 'pix'
+                ? 'Aguardando confirmação do Pix'
+                : paymentMethod === 'boleto'
+                  ? 'Aguardando compensação do boleto'
+                  : 'Preparando sua contratação'}
             </Text>
 
             <Text style={styles.loadingText}>
-              Aguarde enquanto processamos sua solicitação.
+              Aguarde enquanto confirmamos o pagamento. Não feche esta tela.
             </Text>
           </View>
         )}
@@ -1430,6 +1395,7 @@ export default function PrivatePlansScreen({
         )}
       </ScrollView>
 
+      {step === 'showcase' && (
       <PrivateBottomNav
         currentRoute="PrivatePlans"
         onNavigateToHome={onNavigateToHome}
@@ -1438,13 +1404,103 @@ export default function PrivatePlansScreen({
         onNavigateToBenefits={onNavigateToBenefits}
         onNavigateToProfile={onNavigateToProfile}
       />
+      )}
     </SafeAreaView>
   );
 }
 const styles = StyleSheet.create({
+  // ---- Vitrine (padrão novo) ----
+  vtPetList: { gap: 8, paddingBottom: 12 },
+  vtPetLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 12,
+  },
+  vtPetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 22,
+    paddingVertical: 5,
+    paddingLeft: 5,
+    paddingRight: 14,
+  },
+  vtPetPillActive: { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary, borderWidth: 1.5 },
+  vtPetIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  vtPetPhoto: { width: 30, height: 30 },
+  vtPetName: { fontSize: 13, fontFamily: theme.fonts.regular, color: theme.colors.navy },
+  vtPetText: { flex: 1, fontSize: 13, fontFamily: theme.fonts.medium, color: theme.colors.navy },
+  vtLink: { fontSize: 13, fontFamily: theme.fonts.bold, color: theme.colors.primary },
+
+  vtToggle: { flexDirection: 'row', backgroundColor: theme.colors.divider, borderRadius: 12, padding: 4, marginBottom: 16 },
+  vtToggleOption: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 9 },
+  vtToggleOptionActive: { backgroundColor: theme.colors.card },
+  vtToggleText: { fontSize: 13, fontFamily: theme.fonts.semibold, color: theme.colors.muted },
+  vtToggleTextActive: { fontFamily: theme.fonts.bold, color: theme.colors.navy },
+  vtSaveBadge: { backgroundColor: '#E7F6EF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  vtSaveText: { fontSize: 10, fontFamily: theme.fonts.bold, color: theme.colors.success },
+
+  vtCard: {
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 12,
+  },
+  vtCardOpen: { borderColor: theme.colors.primary, borderWidth: 2 },
+  vtRibbon: {
+    position: 'absolute',
+    top: -10,
+    left: 14,
+    backgroundColor: theme.colors.brandYellow,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    zIndex: 2,
+  },
+  vtRibbonText: { fontSize: 10, fontFamily: theme.fonts.bold, color: theme.colors.navy },
+  vtCardTop: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  vtCrown: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  vtPlanName: { fontSize: 15, fontFamily: theme.fonts.bold, color: theme.colors.navy },
+  vtPlanSummary: { fontSize: 11, fontFamily: theme.fonts.regular, color: theme.colors.muted, marginTop: 1 },
+  vtPrice: { fontSize: 16, fontFamily: theme.fonts.bold, color: theme.colors.primary },
+  vtPriceUnit: { fontSize: 10, fontFamily: theme.fonts.regular, color: theme.colors.muted },
+  vtFeatures: { borderTopWidth: 1, borderTopColor: theme.colors.divider, marginTop: 12, paddingTop: 8 },
+  vtFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  vtFeatureText: { flex: 1, fontSize: 12, fontFamily: theme.fonts.medium, color: theme.colors.navy },
+  vtFeatureCount: { fontSize: 12, fontFamily: theme.fonts.semibold, color: theme.colors.muted },
+  vtSeeAll: { fontSize: 12, fontFamily: theme.fonts.bold, color: theme.colors.primary, paddingTop: 6 },
+  vtChooseButton: {
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  vtChooseText: { fontSize: 13, fontFamily: theme.fonts.bold, color: '#FFFFFF' },
+
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.background,
   },
   header: {
     paddingTop:
@@ -1464,11 +1520,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#183C98',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 110,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 130,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -1484,7 +1541,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabButtonActive: {
-    borderBottomColor: '#21479B',
+    borderBottomColor: '#183C98',
   },
   tabText: {
     fontSize: 13,
@@ -1492,7 +1549,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   tabTextActive: {
-    color: '#21479B',
+    color: '#183C98',
     fontWeight: '800',
   },
   cardsList: {
@@ -1513,7 +1570,7 @@ const styles = StyleSheet.create({
   },
   selectedCard: {
     backgroundColor: '#F8FAFF',
-    borderColor: '#315BA8',
+    borderColor: '#183C98',
     borderWidth: 1.5,
   },
   cardTopRow: {
@@ -1539,7 +1596,7 @@ const styles = StyleSheet.create({
   recommendedText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#315BA8',
+    color: '#183C98',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -1561,7 +1618,7 @@ const styles = StyleSheet.create({
   cardPrice: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#183C98',
   },
   cardPeriod: {
     fontSize: 10,
@@ -1589,7 +1646,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 48,
     borderRadius: 12,
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -1659,7 +1716,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   selectedPetCard: {
-    borderColor: '#315BA8',
+    borderColor: '#183C98',
     backgroundColor: '#F8FAFF',
   },
   petAvatar: {
@@ -1725,7 +1782,7 @@ const styles = StyleSheet.create({
   detailRowMetric: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#21479B',
+    color: '#183C98',
     marginLeft: 8,
   },
   cycleRow: {
@@ -1741,7 +1798,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   activeCycleBox: {
-    borderColor: '#21479B',
+    borderColor: '#183C98',
     backgroundColor: '#F5F8FF',
   },
   cycleBoxHeader: {
@@ -1758,7 +1815,7 @@ const styles = StyleSheet.create({
   cyclePrice: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#21479B',
+    color: '#183C98',
   },
   cyclePeriod: {
     fontSize: 10,
@@ -1809,7 +1866,7 @@ const styles = StyleSheet.create({
   summaryValueBold: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#21479B',
+    color: '#183C98',
   },
   summaryDivider: {
     height: 1,
@@ -1851,7 +1908,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   paymentOptionActive: {
-    borderColor: '#21479B',
+    borderColor: '#183C98',
     backgroundColor: '#F5F8FF',
   },
   alternativePaymentInfo: {
@@ -1991,7 +2048,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   installmentDropdownOptionActive: {
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
   },
   installmentNumber: {
     fontSize: 12,
@@ -2019,7 +2076,7 @@ const styles = StyleSheet.create({
   installmentResultValue: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#21479B',
+    color: '#183C98',
   },
   interestInfo: {
     marginTop: 10,

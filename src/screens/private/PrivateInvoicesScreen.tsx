@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   View,
@@ -31,7 +30,7 @@ interface Props {
   invoices?: Invoice[];
 }
 
-const BLUE = '#315BA8';
+const BLUE = '#183C98';
 const NAVY = '#183B72';
 const MUTED = '#71809A';
 const GREEN = '#16865B';

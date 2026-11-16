@@ -4,16 +4,29 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  StatusBar,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Platform,
   Switch,
+  Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import PrivateHeader from '../../components/PrivateHeader';
+import Toast from '../../components/Toast';
+import { theme } from '../../theme/privateTheme';
+
+export type SavedCard = {
+  id: string;
+  brand: string;
+  last4: string;
+  holder: string;
+  expiry: string; // MM/AA
+  isMain: boolean;
+};
 
 interface PrivatePaymentMethodsScreenProps {
   onBack?: () => void;
@@ -22,486 +35,479 @@ interface PrivatePaymentMethodsScreenProps {
   onNavigateToPlans?: () => void;
   onNavigateToBenefits?: () => void;
   onNavigateToProfile?: () => void;
+  cards: SavedCard[];
+  onCardsChange: (cards: SavedCard[]) => void;
+  hasActivePlan: boolean; // regra N9
 }
+
+const C = theme.colors;
+const F = theme.fonts;
+
+const detectBrand = (digits: string) => {
+  if (digits.startsWith('4')) return 'Visa';
+  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return 'Mastercard';
+  if (/^3[47]/.test(digits)) return 'Amex';
+  if (/^(4011|4312|4389|4514|4576|5041|5066|5067|509|6277|6362|6363|650|6516|6550)/.test(digits)) return 'Elo';
+  return 'Cartão';
+};
+
+const maskCard = (text: string) =>
+  text
+    .replace(/\D/g, '')
+    .slice(0, 16)
+    .replace(/(\d{4})(?=\d)/g, '$1 ');
+
+const maskExpiry = (text: string) => {
+  const d = text.replace(/\D/g, '').slice(0, 4);
+  return d.length <= 2 ? d : `${d.slice(0, 2)}/${d.slice(2)}`;
+};
+
+const isExpiryValid = (value: string) => {
+  const match = value.match(/^(\d{2})\/(\d{2})$/);
+  if (!match) return false;
+  const month = Number(match[1]);
+  const year = 2000 + Number(match[2]);
+  if (month < 1 || month > 12) return false;
+  const now = new Date();
+  return year > now.getFullYear() || (year === now.getFullYear() && month >= now.getMonth() + 1);
+};
 
 export default function PrivatePaymentMethodsScreen({
   onBack,
   onNavigateToHome,
-  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
+  cards,
+  onCardsChange,
+  hasActivePlan,
 }: PrivatePaymentMethodsScreenProps) {
-  // Estados do fluxo: 'list' (ou 'empty' se não houver cartões) | 'add' | 'edit' | 'delete'
-  const [viewState, setViewState] = useState<'empty' | 'list' | 'add' | 'edit' | 'delete'>('list');
-  
-  // Menu popup do cartão salvo
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [mode, setMode] = useState<'list' | 'add'>('list');
+  const [menuCard, setMenuCard] = useState<SavedCard | null>(null);
+  const [deleteCard, setDeleteCard] = useState<SavedCard | null>(null);
+  const [toast, setToast] = useState('');
 
-  // Campos do formulário
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardName, setCardName] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [saveForFuture, setSaveForFuture] = useState(true);
+  // Formulário
+  const [number, setNumber] = useState('');
+  const [holder, setHolder] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+  const [makeMain, setMakeMain] = useState(cards.length === 0);
+
+  const mainCard = cards.find((card) => card.isMain) ?? cards[0] ?? null;
+  const otherCards = cards.filter((card) => card.id !== mainCard?.id);
+
+  const resetForm = () => {
+    setNumber('');
+    setHolder('');
+    setExpiry('');
+    setCvv('');
+    setMakeMain(cards.length === 0);
+  };
+
+  const addCard = () => {
+    const digits = number.replace(/\D/g, '');
+    if (digits.length < 13) {
+      Alert.alert('Número incompleto', 'Confira o número do cartão.');
+      return;
+    }
+    if (!holder.trim()) {
+      Alert.alert('Nome obrigatório', 'Digite o nome como está no cartão.');
+      return;
+    }
+    if (!isExpiryValid(expiry)) {
+      Alert.alert('Validade inválida', 'Use o formato MM/AA e uma data futura.');
+      return;
+    }
+    if (cvv.length < 3) {
+      Alert.alert('CVV incompleto', 'Digite os 3 ou 4 números do verso.');
+      return;
+    }
+    const isMain = makeMain || cards.length === 0;
+    const newCard: SavedCard = {
+      id: `card-${Date.now()}`,
+      brand: detectBrand(digits),
+      last4: digits.slice(-4),
+      holder: holder.trim().toUpperCase(),
+      expiry,
+      isMain,
+    };
+    onCardsChange([...cards.map((card) => (isMain ? { ...card, isMain: false } : card)), newCard]);
+    resetForm();
+    setMode('list');
+    setToast('Cartão adicionado');
+  };
+
+  const setAsMain = (card: SavedCard) => {
+    onCardsChange(cards.map((item) => ({ ...item, isMain: item.id === card.id })));
+    setMenuCard(null);
+    setToast(`${card.brand} final ${card.last4} agora é o principal`);
+  };
+
+  // Regra N9: sempre existe um cartão principal e o único não sai com plano ativo.
+  const requestDelete = (card: SavedCard) => {
+    setMenuCard(null);
+    if (cards.length === 1 && hasActivePlan) {
+      Alert.alert(
+        'Não é possível excluir',
+        'Este é o único cartão e você tem um plano ativo. Adicione outro cartão antes de excluir este.',
+      );
+      return;
+    }
+    setDeleteCard(card);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteCard) return;
+    const remaining = cards.filter((card) => card.id !== deleteCard.id);
+    if (deleteCard.isMain && remaining.length > 0) remaining[0] = { ...remaining[0], isMain: true };
+    onCardsChange(remaining);
+    setDeleteCard(null);
+    setToast('Cartão excluído');
+  };
+
+  const previewDigits = number.replace(/\D/g, '');
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <PrivateHeader
+        title={mode === 'add' ? 'Adicionar cartão' : 'Formas de pagamento'}
+        onBack={() => {
+          if (mode === 'add') {
+            resetForm();
+            setMode('list');
+          } else {
+            onBack?.();
+          }
+        }}
+      />
 
-      {/* Cabeçalho */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            if (viewState !== 'list' && viewState !== 'empty') {
-              setViewState('list');
-            } else if (onBack) {
-              onBack();
-            }
-          }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#21479B" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {viewState === 'add' && 'Adicionar Cartão'}
-          {viewState === 'edit' && 'Editar cartão'}
-          {viewState === 'delete' && 'Excluir'}
-          {(viewState === 'list' || viewState === 'empty') && 'Formas de Pagamento'}
-        </Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* ============================================================ */}
-        {/* TELA 1: ESTADO VAZIO (NENHUM CARTÃO CADASTRADO)             */}
-        {/* ============================================================ */}
-        {viewState === 'empty' && (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="card-outline" size={40} color="#21479B" />
-            </View>
-            <Text style={styles.emptyTitle}>Nenhum cartão cadastrado</Text>
-            <Text style={styles.emptySubtitle}>
-              Adicione um cartão de crédito para facilitar o pagamento dos seus planos e serviços.
-            </Text>
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              activeOpacity={0.85}
-              onPress={() => setViewState('add')}
-            >
-              <Ionicons name="add" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryBtnText}>Adicionar Cartão</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ============================================================ */}
-        {/* TELA 2: LISTA DE CARTÕES SALVOS                             */}
-        {/* ============================================================ */}
-        {viewState === 'list' && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Cartões salvos</Text>
-              <Text style={styles.sectionSubtitle}>Gerencie seus cartões e formas de pagamento</Text>
-            </View>
-
-            {/* Cartão Visual Estilizado */}
-            <View style={styles.creditCard}>
-              <View style={styles.cardTopRow}>
-                <Text style={styles.cardBrandText}>Cartão de crédito</Text>
-                <View style={styles.cardTopRight}>
-                  <View style={styles.principalBadge}>
-                    <Text style={styles.principalBadgeText}>Principal</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {mode === 'list' && (
+            <>
+              {mainCard ? (
+                <TouchableOpacity activeOpacity={0.9} onPress={() => setMenuCard(mainCard)}>
+                  <CardVisual card={mainCard} />
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.listCard, styles.emptyCard]}>
+                  <View style={styles.emptyIcon}>
+                    <Feather name="credit-card" size={24} color={C.primary} />
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setMenuVisible(!menuVisible)}
-                    style={styles.menuDotsBtn}
-                  >
-                    <Ionicons name="ellipsis-vertical" size={18} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Menu Popup de Ações (Editar / Excluir) */}
-              {menuVisible && (
-                <View style={styles.popupMenu}>
-                  <TouchableOpacity
-                    style={styles.popupItem}
-                    onPress={() => {
-                      setMenuVisible(false);
-                      setViewState('edit');
-                    }}
-                  >
-                    <Ionicons name="pencil-outline" size={16} color="#0F172A" />
-                    <Text style={styles.popupItemText}>Editar cartão</Text>
-                  </TouchableOpacity>
-                  <View style={styles.popupDivider} />
-                  <TouchableOpacity
-                    style={styles.popupItem}
-                    onPress={() => {
-                      setMenuVisible(false);
-                      setViewState('delete');
-                    }}
-                  >
-                    <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                    <Text style={[styles.popupItemText, { color: '#DC2626' }]}>Excluir cartão</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.emptyTitle}>Nenhum cartão salvo</Text>
+                  <Text style={styles.emptyText}>Adicione um cartão para pagar seus planos.</Text>
                 </View>
               )}
 
-              <Text style={styles.cardNumberText}>••••   ••••   ••••   1234</Text>
+              {otherCards.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Outros cartões</Text>
+                  <View style={styles.listCard}>
+                    {otherCards.map((card, index) => (
+                      <TouchableOpacity
+                        key={card.id}
+                        style={[styles.row, index < otherCards.length - 1 && styles.divider]}
+                        onPress={() => setMenuCard(card)}
+                        activeOpacity={0.75}
+                      >
+                        <Feather name="credit-card" size={18} color={C.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.rowTitle}>
+                            {card.brand} •••• {card.last4}
+                          </Text>
+                          <Text style={styles.rowNote}>Validade {card.expiry}</Text>
+                        </View>
+                        <Feather name="more-vertical" size={18} color={C.muted} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
 
-              <View style={styles.cardBottomRow}>
-                <View>
-                  <Text style={styles.cardHolderLabel}>Jadi Borges</Text>
-                  <Text style={styles.cardExpiryText}>Visa • Vence 08/29</Text>
-                </View>
-                <Text style={styles.visaLogoText}>VISA</Text>
+              <TouchableOpacity style={styles.addCard} onPress={() => setMode('add')} activeOpacity={0.8}>
+                <Feather name="plus" size={17} color={C.primary} />
+                <Text style={styles.addText}>Adicionar cartão</Text>
+              </TouchableOpacity>
+
+              <View style={styles.note}>
+                <Feather name="info" size={14} color={C.muted} />
+                <Text style={styles.noteText}>
+                  O cartão principal é usado nas próximas cobranças. O único cartão não pode ser excluído enquanto houver plano ativo.
+                </Text>
               </View>
-            </View>
+            </>
+          )}
 
-            {/* Botão Adicionar Novo Método */}
-            <TouchableOpacity
-              style={styles.addMethodBtn}
-              activeOpacity={0.8}
-              onPress={() => setViewState('add')}
-            >
-              <Ionicons name="add" size={18} color="#21479B" />
-              <Text style={styles.addMethodBtnText}>Adicionar novo método</Text>
-            </TouchableOpacity>
-
-            {/* Nota de Segurança */}
-            <View style={styles.securityBox}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#21479B" style={{ marginRight: 10 }} />
-              <Text style={styles.securityText}>
-                Seus dados estão seguros. Usamos criptografia de ponta a ponta para proteger suas informações financeiras.
-              </Text>
-            </View>
-          </>
-        )}
-
-        {/* ============================================================ */}
-        {/* TELA 3: ADICIONAR / EDITAR CARTÃO                           */}
-        {/* ============================================================ */}
-        {(viewState === 'add' || viewState === 'edit') && (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Número do cartão</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0000 0000 0000 0000"
-                  placeholderTextColor="#94A3B8"
-                  value={cardNumber}
-                  onChangeText={setCardNumber}
-                  keyboardType="numeric"
-                />
-                <Ionicons name="card-outline" size={18} color="#94A3B8" />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome no cartão</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Como está escrito no cartão"
-                  placeholderTextColor="#94A3B8"
-                  value={cardName}
-                  onChangeText={setCardName}
-                />
-                <Ionicons name="person-outline" size={18} color="#94A3B8" />
-              </View>
-            </View>
-
-            <View style={styles.rowInputs}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Validade</Text>
-                <TextInput
-                  style={styles.inputBox}
-                  placeholder="MM/AA"
-                  placeholderTextColor="#94A3B8"
-                  value={cardExpiry}
-                  onChangeText={setCardExpiry}
-                />
-              </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>CVV</Text>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="123"
-                    placeholderTextColor="#94A3B8"
-                    secureTextEntry
-                    value={cardCvv}
-                    onChangeText={setCardCvv}
-                    keyboardType="numeric"
-                  />
-                  <Ionicons name="eye-off-outline" size={18} color="#94A3B8" />
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Salvar cartão para próximas cobranças</Text>
-              <Switch
-                value={saveForFuture}
-                onValueChange={setSaveForFuture}
-                trackColor={{ false: '#CBD5E1', true: '#21479B' }}
+          {mode === 'add' && (
+            <>
+              <CardVisual
+                card={{
+                  id: 'preview',
+                  brand: previewDigits ? detectBrand(previewDigits) : 'Cartão',
+                  last4: previewDigits.slice(-4).padStart(4, '•'),
+                  holder: holder.trim().toUpperCase() || 'NOME NO CARTÃO',
+                  expiry: expiry || 'MM/AA',
+                  isMain: makeMain,
+                }}
               />
-            </View>
 
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              activeOpacity={0.85}
-              onPress={() => setViewState('list')}
-            >
-              <Text style={styles.primaryBtnText}>
-                {viewState === 'add' ? 'Adicionar cartão' : 'Salvar'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* ============================================================ */}
-        {/* TELA 4: CONFIRMAÇÃO DE EXCLUSÃO                             */}
-        {/* ============================================================ */}
-        {viewState === 'delete' && (
-          <View style={styles.deleteContainer}>
-            <View style={styles.deleteIconCircle}>
-              <Ionicons name="trash-outline" size={32} color="#DC2626" />
-            </View>
-
-            <Text style={styles.deleteTitle}>Tem certeza que deseja excluir este cartão?</Text>
-            <Text style={styles.deleteSubtitle}>
-              Você vai precisar adicioná-lo futuramente para fazer novas compras.
-            </Text>
-
-            {/* Mini Card Preview */}
-            <View style={styles.miniCardPreview}>
-              <View style={styles.miniCardRow}>
-                <Text style={styles.miniCardVisa}>VISA</Text>
-                <Text style={styles.miniCardDots}>•••• •••• •••• 1234</Text>
+              <View style={[styles.listCard, styles.form]}>
+                <Text style={styles.label}>Número do cartão</Text>
+                <TextInput
+                  style={styles.input}
+                  value={number}
+                  onChangeText={(text) => setNumber(maskCard(text))}
+                  placeholder="0000 0000 0000 0000"
+                  placeholderTextColor="#9AA6B8"
+                  keyboardType="number-pad"
+                  maxLength={19}
+                />
+                <Text style={styles.label}>Nome no cartão</Text>
+                <TextInput
+                  style={styles.input}
+                  value={holder}
+                  onChangeText={setHolder}
+                  placeholder="Como está impresso"
+                  placeholderTextColor="#9AA6B8"
+                  autoCapitalize="characters"
+                />
+                <View style={styles.twoCols}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Validade</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={expiry}
+                      onChangeText={(text) => setExpiry(maskExpiry(text))}
+                      placeholder="MM/AA"
+                      placeholderTextColor="#9AA6B8"
+                      keyboardType="number-pad"
+                      maxLength={5}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>CVV</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={cvv}
+                      onChangeText={(text) => setCvv(text.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="123"
+                      placeholderTextColor="#9AA6B8"
+                      keyboardType="number-pad"
+                      secureTextEntry
+                      maxLength={4}
+                    />
+                  </View>
+                </View>
+                {cards.length > 0 && (
+                  <View style={styles.switchRow}>
+                    <Text style={styles.switchText}>Usar como cartão principal</Text>
+                    <Switch
+                      value={makeMain}
+                      onValueChange={setMakeMain}
+                      trackColor={{ false: '#CBD5E1', true: C.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                )}
               </View>
-              <Text style={styles.miniCardName}>Jadi Borges</Text>
-              <Text style={styles.miniCardDate}>12/28</Text>
-            </View>
 
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              activeOpacity={0.85}
-              onPress={() => setViewState('empty')}
-            >
-              <Text style={styles.deleteBtnText}>Excluir cartão</Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={addCard} activeOpacity={0.85}>
+                <Text style={styles.primaryButtonText}>Adicionar cartão</Text>
+              </TouchableOpacity>
+              <View style={styles.secureRow}>
+                <Feather name="lock" size={12} color={C.muted} />
+                <Text style={styles.secureText}>Guardamos só os 4 últimos números do cartão.</Text>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Menu do cartão */}
+      <Modal visible={!!menuCard} transparent animationType="slide" onRequestClose={() => setMenuCard(null)}>
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setMenuCard(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {menuCard?.brand} •••• {menuCard?.last4}
+            </Text>
+            {!menuCard?.isMain && (
+              <TouchableOpacity style={styles.sheetRow} onPress={() => menuCard && setAsMain(menuCard)}>
+                <Feather name="star" size={18} color={C.primary} />
+                <Text style={styles.sheetRowText}>Tornar principal</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.sheetRow} onPress={() => menuCard && requestDelete(menuCard)}>
+              <Feather name="trash-2" size={18} color={C.danger} />
+              <Text style={[styles.sheetRowText, { color: C.danger }]}>Excluir cartão</Text>
             </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              activeOpacity={0.8}
-              onPress={() => setViewState('list')}
-            >
-              <Text style={styles.cancelBtnText}>Cancelar</Text>
+      {/* Confirmar exclusão (E1) */}
+      <Modal visible={!!deleteCard} transparent animationType="fade" onRequestClose={() => setDeleteCard(null)}>
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialog}>
+            <View style={styles.dialogIcon}>
+              <Feather name="trash-2" size={22} color={C.danger} />
+            </View>
+            <Text style={styles.dialogTitle}>Excluir este cartão?</Text>
+            <Text style={styles.dialogText}>
+              {deleteCard?.brand} •••• {deleteCard?.last4} · validade {deleteCard?.expiry}
+            </Text>
+            <TouchableOpacity style={styles.dangerButton} onPress={confirmDelete}>
+              <Text style={styles.dangerButtonText}>Excluir cartão</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.textButton} onPress={() => setDeleteCard(null)}>
+              <Text style={styles.linkText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
-        )}
+        </View>
+      </Modal>
 
-      </ScrollView>
+      <Toast message={toast} onHide={() => setToast('')} />
 
-      {/* Componente Fixo de Navegação */}
-      <PrivateBottomNav
-        currentRoute="PrivateProfile"
-        onNavigateToHome={onNavigateToHome}
-        onNavigateToExplore={onNavigateToExplore}
-        onNavigateToPlans={onNavigateToPlans}
-        onNavigateToBenefits={onNavigateToBenefits}
-        onNavigateToProfile={onNavigateToProfile}
-      />
+      {mode === 'list' && (
+        <PrivateBottomNav
+          currentRoute="PrivateProfile"
+          onNavigateToHome={onNavigateToHome}
+          onNavigateToPlans={onNavigateToPlans}
+          onNavigateToBenefits={onNavigateToBenefits}
+          onNavigateToProfile={onNavigateToProfile}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
+// Desenho do cartão no azul da marca.
+function CardVisual({ card }: { card: SavedCard }) {
+  return (
+    <View style={styles.cardVisual}>
+      <View style={styles.cardCircle} />
+      <View style={styles.cardTop}>
+        <Text style={styles.cardBrand}>{card.brand.toUpperCase()}</Text>
+        {card.isMain && (
+          <View style={styles.mainBadge}>
+            <Text style={styles.mainBadgeText}>Principal</Text>
+          </View>
+        )}
+      </View>
+      <MaterialCommunityIcons name="integrated-circuit-chip" size={30} color={C.brandYellow} style={{ marginTop: 10 }} />
+      <Text style={styles.cardNumber}>•••• •••• •••• {card.last4}</Text>
+      <View style={styles.cardBottom}>
+        <Text style={styles.cardHolder} numberOfLines={1}>{card.holder}</Text>
+        <Text style={styles.cardExpiry}>{card.expiry}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#21479B' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 110 },
+  container: { flex: 1, backgroundColor: C.background },
+  scrollContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 130 },
+  sectionTitle: { fontSize: 15, fontFamily: F.bold, color: C.navy, marginTop: 20, marginBottom: 9 },
 
-  /* Estado Vazio */
-  emptyContainer: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
-  emptySubtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 18, marginBottom: 24 },
-
-  /* Lista & Cartão */
-  sectionHeader: { marginBottom: 16 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
-  sectionSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  creditCard: {
-    backgroundColor: '#21479B',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    position: 'relative',
-    height: 180,
-    justifyContent: 'space-between',
-    elevation: 4,
-  },
-  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardBrandText: { color: '#93C5FD', fontSize: 12, fontWeight: '700' },
-  cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  principalBadge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  principalBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
-  menuDotsBtn: { padding: 4 },
-  popupMenu: {
+  cardVisual: { backgroundColor: C.primary, borderRadius: 18, padding: 16, overflow: 'hidden', minHeight: 170 },
+  cardCircle: {
     position: 'absolute',
-    top: 45,
-    right: 15,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 6,
-    width: 140,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    zIndex: 10,
+    right: -40,
+    top: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#2148AA',
   },
-  popupItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  popupItemText: { fontSize: 12, fontWeight: '700', color: '#0F172A' },
-  popupDivider: { height: 1, backgroundColor: '#F1F5F9' },
-  cardNumberText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 2 },
-  cardBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  cardHolderLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-  cardExpiryText: { color: '#93C5FD', fontSize: 10, marginTop: 2 },
-  visaLogoText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', fontStyle: 'italic' },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardBrand: { fontSize: 15, fontFamily: F.bold, color: '#FFFFFF', letterSpacing: 1 },
+  mainBadge: { backgroundColor: C.brandYellow, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 2 },
+  mainBadgeText: { fontSize: 10, fontFamily: F.bold, color: C.navy },
+  cardNumber: { fontSize: 18, fontFamily: F.semibold, color: '#FFFFFF', letterSpacing: 2, marginTop: 8 },
+  cardBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 10 },
+  cardHolder: { flex: 1, fontSize: 12, fontFamily: F.medium, color: '#C9D6EE' },
+  cardExpiry: { fontSize: 12, fontFamily: F.medium, color: '#C9D6EE' },
 
-  addMethodBtn: {
+  listCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingHorizontal: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
+  divider: { borderBottomWidth: 1, borderBottomColor: C.divider },
+  rowTitle: { fontSize: 14, fontFamily: F.bold, color: C.navy },
+  rowNote: { fontSize: 11, fontFamily: F.regular, color: C.muted, marginTop: 1 },
+
+  emptyCard: { alignItems: 'center', paddingVertical: 24 },
+  emptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { fontSize: 15, fontFamily: F.bold, color: C.navy, marginTop: 10 },
+  emptyText: { fontSize: 12, fontFamily: F.regular, color: C.muted, marginTop: 4, textAlign: 'center' },
+
+  addCard: {
     flexDirection: 'row',
+    gap: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#21479B',
     borderStyle: 'dashed',
-    borderRadius: 16,
-    height: 50,
-    gap: 8,
-    marginBottom: 20,
-  },
-  addMethodBtnText: { color: '#21479B', fontWeight: '800', fontSize: 13 },
-  securityBox: {
-    flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
+    borderColor: '#C9D3E3',
     borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingVertical: 14,
+    marginTop: 14,
   },
-  securityText: { fontSize: 11, color: '#64748B', flex: 1, lineHeight: 16 },
+  addText: { fontSize: 14, fontFamily: F.bold, color: C.primary },
+  note: { flexDirection: 'row', gap: 7, marginTop: 14 },
+  noteText: { flex: 1, fontSize: 11, fontFamily: F.regular, color: C.muted, lineHeight: 16 },
 
-  /* Formulário */
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 6 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+  form: { paddingVertical: 14, marginTop: 14 },
+  label: { fontSize: 13, fontFamily: F.bold, color: C.navy, marginBottom: 7 },
+  input: {
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
+    borderColor: C.border,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 48,
-  },
-  input: { flex: 1, fontSize: 13, color: '#0F172A', fontWeight: '500' },
-  inputBox: {
+    fontSize: 14,
+    fontFamily: F.medium,
+    color: C.navy,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginBottom: 14,
+  },
+  twoCols: { flexDirection: 'row', gap: 10 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchText: { fontSize: 13, fontFamily: F.semibold, color: C.navy },
+  secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 },
+  secureText: { fontSize: 11, fontFamily: F.regular, color: C.muted },
+
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: theme.radius.button,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: F.bold },
+
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 30 },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#D5DCE7', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { fontSize: 16, fontFamily: F.bold, color: C.navy, marginBottom: 6 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  sheetRowText: { fontSize: 14, fontFamily: F.semibold, color: C.navy },
+
+  dialogOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  dialog: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, alignSelf: 'stretch', alignItems: 'center' },
+  dialogIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FDECEC', alignItems: 'center', justifyContent: 'center' },
+  dialogTitle: { fontSize: 17, fontFamily: F.bold, color: C.navy, marginTop: 12 },
+  dialogText: { fontSize: 13, fontFamily: F.regular, color: C.textSecondary, marginTop: 6, textAlign: 'center' },
+  dangerButton: {
+    alignSelf: 'stretch',
+    minHeight: 46,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-    fontSize: 13,
-    color: '#0F172A',
-  },
-  rowInputs: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 12, marginBottom: 24 },
-  switchLabel: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-
-  primaryBtn: {
-    backgroundColor: '#21479B',
-    height: 50,
-    borderRadius: 14,
-    flexDirection: 'row',
+    backgroundColor: C.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    width: '100%',
+    marginTop: 18,
   },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
-
-  /* Excluir */
-  deleteContainer: { alignItems: 'center', paddingVertical: 20 },
-  deleteIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  deleteTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', textAlign: 'center', marginBottom: 8 },
-  deleteSubtitle: { fontSize: 12, color: '#64748B', textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
-  miniCardPreview: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 16,
-    marginBottom: 24,
-  },
-  miniCardRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  miniCardVisa: { fontSize: 14, fontWeight: '900', color: '#21479B' },
-  miniCardDots: { fontSize: 13, color: '#64748B', fontWeight: '600' },
-  miniCardName: { fontSize: 12, fontWeight: '700', color: '#0F172A' },
-  miniCardDate: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
-  deleteBtn: {
-    backgroundColor: '#DC2626',
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: 10,
-  },
-  deleteBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
-  cancelBtn: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  cancelBtnText: { color: '#0F172A', fontWeight: '800', fontSize: 13 },
+  dangerButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: F.bold },
+  textButton: { alignItems: 'center', paddingVertical: 12 },
+  linkText: { fontSize: 14, fontFamily: F.bold, color: C.primary },
 });

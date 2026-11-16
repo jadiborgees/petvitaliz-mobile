@@ -104,7 +104,7 @@ export default function PrivateBottomNav({
         >
           <MaterialCommunityIcons
             name={isPlanActive ? 'crown' : 'crown-outline'}
-            size={20}
+            size={24} // a coroa é um desenho menor; 24 fica do tamanho visual dos outros ícones de 20
             color={isPlanActive ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR}
           />
         </Tab>
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 56,
     borderRadius: 22,
-    backgroundColor: '#21479B',
+    backgroundColor: '#183C98',
     alignItems: 'center',
     justifyContent: 'center',
   },

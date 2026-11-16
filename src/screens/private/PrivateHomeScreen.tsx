@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -18,8 +17,22 @@ import {
   TextInput,
   Keyboard,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { theme } from '../../theme/privateTheme';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import PetAvatar from '../../components/PetAvatar';
+import type { Pet } from './PrivatePetsFlowScreen';
+import { PLAN_NAMES, PLAN_COVERAGE, SERVICES as PLAN_SERVICES, getPlanId } from '../../data/planCoverage';
+import type { ConsultationAppointment } from './PrivateConsultationsScreen';
+
+// Dados de cobrança do plano contratado (para mostrar a renovação).
+type HomeSubscription = {
+  petId: string;
+  petName: string;
+  billingCycle: 'monthly' | 'yearly';
+  status: 'paid' | 'pending';
+  startedAt?: string;
+};
 
 interface PrivateHomeScreenProps {
   onNavigateToHome?: () => void;
@@ -39,6 +52,14 @@ interface PrivateHomeScreenProps {
   userName?: string;
   userEmail?: string;
   profileImage?: string | null;
+  pets?: Pet[];
+  subscription?: HomeSubscription | null;
+  onNavigateToMyPlan?: () => void;
+  onContractPlan?: (petId: string) => void;
+  onNavigateToTerms?: () => void;
+  upcomingCount?: number; // consultas marcadas (para o atalho)
+  appointments?: ConsultationAppointment[];
+  onOpenPlan?: (planId: string) => void;
 }
 
 interface ServiceSlide {
@@ -58,9 +79,12 @@ const BANNER_GAP = 16;
 const SERVICE_WIDTH = width * 0.7;
 const SERVICE_GAP = 12;
 
-const PRIMARY = '#21479B';
-const BACKGROUND = '#F5F7FC';
-const PALE_BLUE = '#EAF0FF';
+const PRIMARY = '#183C98';
+const BACKGROUND = '#F6F8FC';
+const PALE_BLUE = '#E8EEFA';
+
+// Plano de cada banner, na mesma ordem da lista abaixo.
+const BANNER_PLAN_IDS = ['bronze', 'prata', 'ouro', 'diamante'];
 
 const BANNERS: ImageSourcePropType[] = [
   require('../../assets/Plano-Bronze.png'),
@@ -134,7 +158,16 @@ export default function PrivateHomeScreen({
   profileImage,
   userName = 'Jadi Borges',
   userEmail = '',
+  pets = [],
+  subscription,
+  onNavigateToMyPlan,
+  onContractPlan,
+  onNavigateToTerms,
+  upcomingCount = 0,
+  appointments = [],
+  onOpenPlan,
 }: PrivateHomeScreenProps) {
+  const activePlans = pets.filter((pet) => pet.hasActivePlan).length;
   const firstName = userName.trim().split(' ')[0] || 'Usuário';
   const initial = firstName.charAt(0).toUpperCase();
 
@@ -393,12 +426,14 @@ export default function PrivateHomeScreen({
             }}
           >
             {BANNERS.map((banner, index) => (
-              <Image
+              // Tocar no banner (ou no "Assine agora") abre o plano dele.
+              <TouchableOpacity
                 key={`banner-${index}`}
-                source={banner}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
+                activeOpacity={0.92}
+                onPress={() => onOpenPlan?.(BANNER_PLAN_IDS[index])}
+              >
+                <Image source={banner} style={styles.bannerImage} resizeMode="cover" />
+              </TouchableOpacity>
             ))}
           </ScrollView>
 
@@ -420,98 +455,141 @@ export default function PrivateHomeScreen({
         {/* MEU PLANO */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Meu plano</Text>
-
-          <TouchableOpacity
-            onPress={onNavigateToPlans}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.seeMoreLink}>Ver mais</Text>
-          </TouchableOpacity>
+          {pets.length > 0 && (
+            <TouchableOpacity onPress={onNavigateToMyPlan ?? onNavigateToPlans} activeOpacity={0.7}>
+              <Text style={styles.seeMoreLink}>Ver tudo</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.plansRow}
-        >
-          {/* Pet 1: Lua */}
-          <TouchableOpacity
-            style={styles.planCard}
-            activeOpacity={0.9}
-            onPress={onNavigateToPlans}
-          >
-            <View style={styles.petRow}>
-              <Image
-                source={require('../../assets/Explorar2.png')}
-                style={styles.petImage}
-              />
-
-              <View style={styles.petInfo}>
-                <Text style={styles.petName}>Lua</Text>
-                <Text style={styles.petDetails}>
-                  Golden Retriever · 3 anos
-                </Text>
-              </View>
-
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color="#94A3B8"
-              />
-            </View>
-
-            <View style={styles.planBox}>
-              <View>
-                <Text style={styles.planName}>Plano Ouro</Text>
-
-                <Text style={styles.planRenewal}>
-                  Renovação{' '}
-                  <Text style={styles.planRenewalStrong}>
-                    24/06/2027
-                  </Text>
-                </Text>
-              </View>
-
-              <View style={styles.statusPill}>
-                <Text style={styles.statusPillText}>Ativo</Text>
+        {pets.length === 0 ? (
+          /* Chamada para cadastrar o primeiro pet */
+          <TouchableOpacity style={styles.mpHero} activeOpacity={0.92} onPress={onNavigateToPets}>
+            <View style={styles.mpHeroCircleBig} />
+            <View style={styles.mpHeroCircle} />
+            <Image source={require('../../assets/pets-abraco.png')} style={styles.mpHeroImage} resizeMode="contain" />
+            <View style={styles.mpHeroText}>
+              <Text style={styles.mpHeroEyebrow}>Primeiro passo</Text>
+              <Text style={styles.mpHeroTitle}>Cadastre seu pet e escolha um plano</Text>
+              <Text style={styles.mpHeroSubtitle}>Consultas, vacinas e banho.</Text>
+              <View style={styles.mpHeroButton}>
+                <Feather name="plus" size={15} color={T.navy} />
+                <Text style={styles.mpHeroButtonText}>Adicionar pet</Text>
               </View>
             </View>
           </TouchableOpacity>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.plansRow}>
+            {pets.map((pet) => {
+              const planId = pet.hasActivePlan ? getPlanId(pet.plan) : null;
+              const details = subscription && subscription.petId === pet.id ? subscription : null;
+              const petDetails = [pet.breed, pet.age].filter(Boolean).join(' · ');
 
-          {/* Pet 2: Savannah */}
-          <TouchableOpacity
-            style={styles.planCard}
-            activeOpacity={0.9}
-            onPress={onNavigateToPlans}
-          >
-            <View style={styles.petRow}>
-              <Image
-                source={require('../../assets/Explorar3.png')}
-                style={styles.petImage}
-              />
+              // Renovação: data da contratação + 1 mês (mensal) ou + 1 ano (anual).
+              let renewal: string | null = null;
+              if (details?.startedAt) {
+                const date = new Date(details.startedAt);
+                if (details.billingCycle === 'yearly') date.setFullYear(date.getFullYear() + 1);
+                else date.setMonth(date.getMonth() + 1);
+                renewal = date
+                  .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                  .replace(/\./g, '')
+                  .replace(/ de /g, ' ');
+              }
 
-              <View style={styles.petInfo}>
-                <Text style={styles.petName}>Savannah</Text>
-                <Text style={styles.petDetails}>Female</Text>
-              </View>
+              // Barrinha: o serviço com cota mais usada no mês.
+              let usage: { name: string; used: number; quota: number } | null = null;
+              if (planId) {
+                const now = new Date();
+                const coverage = PLAN_COVERAGE[planId];
+                PLAN_SERVICES.forEach((service) => {
+                  const quota = coverage[service.id];
+                  if (typeof quota !== 'number') return;
+                  const used = appointments.filter((item) => {
+                    if (item.petId !== pet.id || item.status === 'cancelled') return false;
+                    const [year, month] = item.date.split('-').map(Number);
+                    return (
+                      (item.serviceId ?? 'consulta') === service.id &&
+                      year === now.getFullYear() &&
+                      month === now.getMonth() + 1
+                    );
+                  }).length;
+                  if (!usage || used / quota > usage.used / usage.quota) {
+                    usage = { name: service.name, used, quota };
+                  }
+                });
+              }
+              const usageInfo = usage as { name: string; used: number; quota: number } | null;
 
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color="#94A3B8"
-              />
-            </View>
+              return (
+                <TouchableOpacity
+                  key={pet.id}
+                  style={styles.mpCard}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    planId
+                      ? (onNavigateToMyPlan ?? onNavigateToPlans)?.()
+                      : onContractPlan
+                        ? onContractPlan(pet.id)
+                        : onNavigateToPlans?.()
+                  }
+                >
+                  <View style={styles.mpTop}>
+                    <PetAvatar species={pet.species} avatar={pet.avatar} size={44} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.mpPetName} numberOfLines={1}>{pet.name}</Text>
+                      <Text style={styles.mpPetDetails} numberOfLines={1}>{petDetails || pet.species}</Text>
+                    </View>
+                    <View style={[styles.mpBadge, !planId && styles.mpBadgeNoPlan]}>
+                      <Text style={[styles.mpBadgeText, !planId && { color: T.warning }]}>
+                        {planId ? (details?.status === 'pending' ? 'Pendente' : 'Ativo') : 'Sem plano'}
+                      </Text>
+                    </View>
+                  </View>
 
-            <View style={styles.planBox}>
-              <View>
-                <Text style={styles.planName}>Grooming</Text>
-                <Text style={styles.planRenewal}>
-                  Serviço contratado
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </ScrollView>
+                  {planId ? (
+                    <>
+                      <View style={styles.mpPlanRow}>
+                        <MaterialCommunityIcons name="crown-outline" size={19} color={T.warning} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.mpPlanName}>{PLAN_NAMES[planId]}</Text>
+                          <Text style={styles.mpPlanNote}>{renewal ? `Renova em ${renewal}` : 'Plano ativo'}</Text>
+                        </View>
+                      </View>
+                      {usageInfo ? (
+                        <View style={{ marginTop: 10 }}>
+                          <View style={styles.mpUsageRow}>
+                            <Text style={styles.mpUsageText}>{usageInfo.name} no mês</Text>
+                            <Text style={styles.mpUsageText}>
+                              {Math.min(usageInfo.used, usageInfo.quota)} de {usageInfo.quota}
+                            </Text>
+                          </View>
+                          <View style={styles.mpBarTrack}>
+                            <View
+                              style={[
+                                styles.mpBarFill,
+                                {
+                                  width: `${Math.max(Math.min(usageInfo.used / usageInfo.quota, 1) * 100, 4)}%` as `${number}%`,
+                                  backgroundColor: usageInfo.used >= usageInfo.quota ? T.warning : T.primary,
+                                },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                      ) : (
+                        <Text style={[styles.mpUsageText, { marginTop: 10 }]}>Serviços ilimitados no mês</Text>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.mpChooseButton}>
+                      <Text style={styles.mpChooseText}>Escolher um plano</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* SERVIÇOS */}
         <View style={styles.sectionHeaderRow}>
@@ -631,7 +709,7 @@ export default function PrivateHomeScreen({
             <Ionicons
               name="headset-outline"
               size={20}
-              color="#FFFFFF"
+              color={T.primary}
             />
           </View>
 
@@ -648,7 +726,7 @@ export default function PrivateHomeScreen({
           <Ionicons
             name="chevron-forward"
             size={18}
-            color="#94A3B8"
+            color="#FFFFFF"
           />
         </TouchableOpacity>
 
@@ -662,7 +740,7 @@ export default function PrivateHomeScreen({
             <Ionicons
               name="star-outline"
               size={20}
-              color="#F59E0B"
+              color="#E5A800"
             />
           </View>
 
@@ -682,7 +760,7 @@ export default function PrivateHomeScreen({
                 key={star}
                 name="star-outline"
                 size={15}
-                color="#F59E0B"
+                color="#E5A800"
               />
             ))}
           </View>
@@ -713,196 +791,129 @@ export default function PrivateHomeScreen({
         onRequestClose={() => setAccountMenuVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setAccountMenuVisible(false)}
-          />
+          <Pressable style={styles.modalBackdrop} onPress={() => setAccountMenuVisible(false)} />
 
-          <View style={styles.accountSheet}>
-            <View style={styles.modalHandle} />
+          <View style={styles.accSheet}>
+            <View style={styles.accHandle} />
 
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Minha conta</Text>
-
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setAccountMenuVisible(false)}
-              >
-                <Ionicons
-                  name="close"
-                  size={22}
-                  color="#475569"
-                />
+            <View style={styles.accHeader}>
+              <Text style={styles.accTitle}>Minha conta</Text>
+              <TouchableOpacity style={styles.accClose} onPress={() => setAccountMenuVisible(false)}>
+                <Feather name="x" size={18} color={T.navy} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.accountScroll}
-            >
-              {/* PERFIL */}
-              <TouchableOpacity
-                style={styles.profileCard}
-                activeOpacity={0.8}
-                onPress={() =>
-                  handleMenuNavigation(onNavigateToProfile)
-                }
-              >
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accScroll}>
+              {/* Perfil */}
+              <View style={[styles.accCard, styles.accProfile]}>
                 {profileImage ? (
-                  <Image
-                    source={{ uri: profileImage }}
-                    style={styles.profileAvatar}
-                  />
+                  <Image source={{ uri: profileImage }} style={styles.accAvatar} />
                 ) : (
-                  <View style={styles.profileAvatar}>
-                    <Text style={styles.profileAvatarText}>
-                      {initial}
-                    </Text>
+                  <View style={styles.accAvatar}>
+                    <Text style={styles.accAvatarText}>{initial}</Text>
                   </View>
                 )}
-
-                <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>
-                    {userName}
-                  </Text>
-
-                  <Text style={styles.profileEmail}>
-                    {userEmail || 'E-mail não informado'}
-                  </Text>
-
-                  <Text style={styles.profileLink}>
-                    Ver meu perfil
-                  </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accName} numberOfLines={1}>{userName}</Text>
+                  <Text style={styles.accEmail} numberOfLines={1}>{userEmail || 'E-mail não informado'}</Text>
                 </View>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color="#94A3B8"
-                />
-              </TouchableOpacity>
-
-              {/* ATALHOS */}
-              <Text style={styles.menuSectionTitle}>
-                MEUS ATALHOS
-              </Text>
-
-              <View style={styles.shortcuts}>
-                <TouchableOpacity
-                  style={styles.shortcut}
-                  activeOpacity={0.7}
-                  onPress={() =>
-                    handleMenuNavigation(onNavigateToPets)
-                  }
-                >
-                  <View style={styles.shortcutIcon}>
-                    <Ionicons
-                      name="paw-outline"
-                      size={23}
-                      color={PRIMARY}
-                    />
-                  </View>
-
-                  <Text style={styles.shortcutTitle}>
-                    Meus Pets
-                  </Text>
-
-                  <Text style={styles.shortcutSubtitle}>
-                    Animais cadastrados
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.shortcut}
-                  activeOpacity={0.7}
-                  onPress={() =>
-                    handleMenuNavigation(onNavigateToConsultations)
-                  }
-                >
-                  <View style={styles.shortcutIcon}>
-                    <Ionicons
-                      name="calendar-outline"
-                      size={23}
-                      color={PRIMARY}
-                    />
-                  </View>
-
-                  <Text style={styles.shortcutTitle}>
-                    Consultas
-                  </Text>
-
-                  <Text style={styles.shortcutSubtitle}>
-                    Meus agendamentos
-                  </Text>
+                <TouchableOpacity onPress={() => handleMenuNavigation(onNavigateToPersonalData)}>
+                  <Text style={styles.accLink}>Editar</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* CONTA E PREFERÊNCIAS */}
-              <Text style={styles.menuSectionTitle}>
-                CONTA E PREFERÊNCIAS
-              </Text>
-
-              <View style={styles.menuGroup}>
-                {renderMenuItem(
-                  'person-outline',
-                  'Dados pessoais',
-                  onNavigateToPersonalData,
-                )}
-
-                {renderMenuItem(
-                  'card-outline',
-                  'Formas de pagamento',
-                  onNavigateToPaymentMethods,
-                )}
-
-                {renderMenuItem(
-                  'notifications-outline',
-                  'Notificações',
-                  onNavigateToNotifications,
-                )}
-
-                {renderMenuItem(
-                  'shield-checkmark-outline',
-                  'Segurança',
-                  onNavigateToSecurity,
-                )}
+              {/* Atalhos */}
+              <View style={styles.accShortcuts}>
+                {[
+                  {
+                    key: 'pets',
+                    icon: 'paw' as const,
+                    title: 'Meus pets',
+                    note: pets.length === 1 ? '1 pet' : `${pets.length} pets`,
+                    onPress: onNavigateToPets,
+                  },
+                  {
+                    key: 'consultas',
+                    icon: 'calendar-blank-outline' as const,
+                    title: 'Consultas',
+                    note:
+                      upcomingCount === 0
+                        ? 'Nenhuma marcada'
+                        : upcomingCount === 1
+                          ? '1 próxima'
+                          : `${upcomingCount} próximas`,
+                    onPress: onNavigateToConsultations,
+                  },
+                  {
+                    key: 'plano',
+                    icon: 'crown-outline' as const,
+                    title: 'Meu plano',
+                    note: activePlans === 0 ? 'Nenhum ativo' : activePlans === 1 ? '1 ativo' : `${activePlans} ativos`,
+                    onPress: onNavigateToMyPlan ?? onNavigateToPlans,
+                  },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[styles.accCard, styles.accShortcut]}
+                    activeOpacity={0.8}
+                    onPress={() => handleMenuNavigation(item.onPress)}
+                  >
+                    <View style={styles.accShortcutIcon}>
+                      <MaterialCommunityIcons name={item.icon} size={19} color={T.primary} />
+                    </View>
+                    <Text style={styles.accShortcutTitle}>{item.title}</Text>
+                    <Text style={styles.accShortcutNote}>{item.note}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
-              {/* SUPORTE */}
-              <Text style={styles.menuSectionTitle}>
-                PRECISA DE AJUDA?
-              </Text>
-
-              <View style={styles.menuGroup}>
-                {renderMenuItem(
-                  'headset-outline',
-                  'Ajuda e suporte',
-                  onNavigateToSupport,
-                )}
+              {/* Conta e preferências */}
+              <Text style={styles.accSection}>Conta e preferências</Text>
+              <View style={[styles.accCard, styles.accList]}>
+                {[
+                  { icon: 'user' as const, title: 'Dados pessoais', onPress: onNavigateToPersonalData },
+                  { icon: 'credit-card' as const, title: 'Formas de pagamento', onPress: onNavigateToPaymentMethods },
+                  { icon: 'bell' as const, title: 'Notificações', onPress: onNavigateToNotifications },
+                  { icon: 'shield' as const, title: 'Segurança', onPress: onNavigateToSecurity },
+                ].map((item, index, list) => (
+                  <TouchableOpacity
+                    key={item.title}
+                    style={[styles.accRow, index < list.length - 1 && styles.accDivider]}
+                    activeOpacity={0.75}
+                    onPress={() => handleMenuNavigation(item.onPress)}
+                  >
+                    <Feather name={item.icon} size={18} color={T.primary} />
+                    <Text style={styles.accRowText}>{item.title}</Text>
+                    <Feather name="chevron-right" size={18} color="#9AA6B8" />
+                  </TouchableOpacity>
+                ))}
               </View>
 
-              {/* SAIR */}
-              <TouchableOpacity
-                style={styles.logoutButton}
-                activeOpacity={0.7}
-                onPress={() =>
-                  handleMenuNavigation(onLogout)
-                }
-              >
-                <Ionicons
-                  name="log-out-outline"
-                  size={20}
-                  color="#DC2626"
-                />
+              {/* Ajuda */}
+              <Text style={styles.accSection}>Ajuda</Text>
+              <View style={[styles.accCard, styles.accList]}>
+                {[
+                  { icon: 'headphones' as const, title: 'Ajuda e suporte', onPress: onNavigateToSupport },
+                  { icon: 'file-text' as const, title: 'Termos e privacidade', onPress: onNavigateToTerms },
+                ].map((item, index, list) => (
+                  <TouchableOpacity
+                    key={item.title}
+                    style={[styles.accRow, index < list.length - 1 && styles.accDivider]}
+                    activeOpacity={0.75}
+                    onPress={() => handleMenuNavigation(item.onPress)}
+                  >
+                    <Feather name={item.icon} size={18} color={T.primary} />
+                    <Text style={styles.accRowText}>{item.title}</Text>
+                    <Feather name="chevron-right" size={18} color="#9AA6B8" />
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-                <Text style={styles.logoutText}>
-                  Sair da conta
-                </Text>
+              {/* Sair */}
+              <TouchableOpacity style={styles.accLogout} activeOpacity={0.7} onPress={() => handleMenuNavigation(onLogout)}>
+                <Feather name="log-out" size={17} color={T.danger} />
+                <Text style={styles.accLogoutText}>Sair da conta</Text>
               </TouchableOpacity>
-
-              <Text style={styles.versionText}>
-                PetVitaliz · Sua saúde, nosso cuidado.
-              </Text>
             </ScrollView>
           </View>
         </View>
@@ -911,7 +922,141 @@ export default function PrivateHomeScreen({
   );
 }
 
+const T = theme.colors;
+const TF = theme.fonts;
+
 const styles = StyleSheet.create({
+  // ---- Meu plano (Home) ----
+  mpHero: {
+    marginHorizontal: 20,
+    height: 172,
+    borderRadius: 22,
+    backgroundColor: T.primary,
+    overflow: 'hidden',
+  },
+  mpHeroCircleBig: {
+    position: 'absolute',
+    right: -50,
+    top: -40,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    backgroundColor: '#2148AA',
+  },
+  mpHeroCircle: {
+    position: 'absolute',
+    right: -20,
+    top: -10,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: '#2C55BC',
+  },
+  mpHeroImage: { position: 'absolute', right: 6, bottom: 8, width: 159, height: 134 },
+  mpHeroText: { position: 'absolute', left: 18, top: 18, width: '52%' },
+  mpHeroEyebrow: { fontSize: 12, fontFamily: TF.medium, color: '#B9C8E6' },
+  mpHeroTitle: { fontSize: 17, fontFamily: TF.bold, color: '#FFFFFF', lineHeight: 22, marginTop: 4 },
+  mpHeroSubtitle: { fontSize: 12, fontFamily: TF.regular, color: '#C9D6EE', marginTop: 5 },
+  mpHeroButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: T.brandYellow,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 12,
+  },
+  mpHeroButtonText: { fontSize: 13, fontFamily: TF.bold, color: T.navy },
+
+  mpCard: {
+    width: 250,
+    backgroundColor: T.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 14,
+  },
+  mpTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mpPetName: { fontSize: 15, fontFamily: TF.bold, color: T.navy },
+  mpPetDetails: { fontSize: 11, fontFamily: TF.regular, color: T.muted, marginTop: 1 },
+  mpBadge: { backgroundColor: '#E7F6EF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  mpBadgeNoPlan: { backgroundColor: '#FFF4DE' },
+  mpBadgeText: { fontSize: 10, fontFamily: TF.bold, color: T.success },
+  mpPlanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: T.divider,
+  },
+  mpPlanName: { fontSize: 13, fontFamily: TF.bold, color: T.navy },
+  mpPlanNote: { fontSize: 11, fontFamily: TF.regular, color: T.muted, marginTop: 1 },
+  mpUsageRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  mpUsageText: { fontSize: 11, fontFamily: TF.regular, color: T.muted },
+  mpBarTrack: { height: 5, borderRadius: 3, backgroundColor: T.divider, marginTop: 5, overflow: 'hidden' },
+  mpBarFill: { height: 5, borderRadius: 3 },
+  mpChooseButton: {
+    marginTop: 14,
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mpChooseText: { fontSize: 12, fontFamily: TF.bold, color: '#FFFFFF' },
+
+  // ---- Menu Minha conta (padrão novo) ----
+  accSheet: {
+    backgroundColor: T.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingTop: 10,
+  },
+  accHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#D5DCE7', alignSelf: 'center', marginBottom: 12 },
+  accHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginBottom: 12 },
+  accTitle: { fontSize: 19, fontFamily: TF.bold, color: T.navy },
+  accClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: T.divider, alignItems: 'center', justifyContent: 'center' },
+  accScroll: { paddingHorizontal: 18, paddingBottom: 36 },
+  accCard: { backgroundColor: T.card, borderWidth: 1, borderColor: T.border, borderRadius: theme.radius.card },
+  accProfile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: theme.radius.bigCard },
+  accAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accAvatarText: { fontSize: 19, fontFamily: TF.bold, color: '#FFFFFF' },
+  accName: { fontSize: 16, fontFamily: TF.bold, color: T.navy },
+  accEmail: { fontSize: 12, fontFamily: TF.regular, color: T.muted, marginTop: 2 },
+  accLink: { fontSize: 13, fontFamily: TF.bold, color: T.primary },
+  accShortcuts: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  accShortcut: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4 },
+  accShortcutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: T.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 7,
+  },
+  accShortcutTitle: { fontSize: 12, fontFamily: TF.bold, color: T.navy, textAlign: 'center' },
+  accShortcutNote: { fontSize: 10, fontFamily: TF.regular, color: T.muted, marginTop: 2, textAlign: 'center' },
+  accSection: { fontSize: 14, fontFamily: TF.bold, color: T.navy, marginTop: 20, marginBottom: 8 },
+  accList: { paddingHorizontal: 14 },
+  accRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  accDivider: { borderBottomWidth: 1, borderBottomColor: T.divider },
+  accRowText: { flex: 1, fontSize: 14, fontFamily: TF.semibold, color: T.navy },
+  accLogout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18, marginTop: 6 },
+  accLogoutText: { fontSize: 14, fontFamily: TF.bold, color: T.danger },
+
   container: {
     flex: 1,
     backgroundColor: BACKGROUND,
@@ -1311,18 +1456,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 20,
     marginTop: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: T.primary,
     borderRadius: 18,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
 
   supportIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: PRIMARY,
+    backgroundColor: T.brandYellow,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1334,13 +1477,14 @@ const styles = StyleSheet.create({
 
   supportTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontFamily: TF.bold,
+    color: '#FFFFFF',
   },
 
   supportSubtitle: {
     fontSize: 12,
-    color: '#64748B',
+    fontFamily: TF.regular,
+    color: '#C9D6EE',
     marginTop: 2,
   },
 
@@ -1355,14 +1499,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: T.border,
   },
 
   ratingIcon: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#FFF7E6',
+    backgroundColor: '#FFF5D6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1374,13 +1518,14 @@ const styles = StyleSheet.create({
 
   ratingTitle: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#17233F',
+    fontFamily: TF.bold,
+    color: T.navy,
   },
 
   ratingSubtitle: {
     fontSize: 10,
-    color: '#718096',
+    fontFamily: TF.regular,
+    color: T.muted,
     marginTop: 3,
   },
 

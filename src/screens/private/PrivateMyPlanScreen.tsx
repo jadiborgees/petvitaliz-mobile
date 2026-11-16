@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -6,14 +5,23 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  StatusBar,
   TouchableOpacity,
   Alert,
-  Image,
 } from 'react-native';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import PrivateBottomNav from '../../components/PrivateBottomNav';
+import PrivateHeader from '../../components/PrivateHeader';
+import PetAvatar from '../../components/PetAvatar';
+import { theme } from '../../theme/privateTheme';
 import type { Pet } from './PrivatePetsFlowScreen';
+import type { ConsultationAppointment } from './PrivateConsultationsScreen';
+import {
+  SERVICES,
+  PLAN_COVERAGE,
+  PLAN_NAMES,
+  getPlanId,
+  type ServiceId,
+} from '../../data/planCoverage';
 
 type PaymentMethod = 'card' | 'pix' | 'boleto';
 type BillingCycle = 'monthly' | 'yearly';
@@ -28,6 +36,12 @@ type PlanSubscription = {
   totalPrice: number;
   installments: number;
   status: PaymentStatus;
+  startedAt?: string; // data da contratação (ISO)
+  scheduledChange?: {
+    planName: string;
+    billingCycle: BillingCycle;
+    effectiveDate: string;
+  } | null;
 };
 
 type Invoice = {
@@ -38,16 +52,10 @@ type Invoice = {
   status: 'Paga' | 'Pendente';
 };
 
-type BenefitUsage = {
-  name: string;
-  used: number;
-  limit: number | null;
-};
-
 interface Props {
   onBack?: () => void;
   onNavigateToHome: () => void;
-  onNavigateToExplore: () => void;
+  onNavigateToExplore?: () => void;
   onNavigateToPlans: () => void;
   onNavigateToBenefits: () => void;
   onNavigateToProfile: () => void;
@@ -55,24 +63,20 @@ interface Props {
   onNavigateToPaymentMethods?: () => void;
   onNavigateToPets?: () => void;
   onNavigateToInvoices?: () => void;
+  onNavigateToSchedule?: (petId: string) => void;
+  onNavigateToChangePlan?: (petId: string) => void;
   subscription?: PlanSubscription | null;
   invoices?: Invoice[];
-  benefitsUsage?: BenefitUsage[];
-  nextBillingDate?: string;
+  appointments?: ConsultationAppointment[];
   onCancelSubscription?: () => void;
   pets: Pet[];
 }
 
-const BLUE = '#315BA8';
-const NAVY = '#183B72';
-const MUTED = '#71809A';
-const GREEN = '#16865B';
+const C = theme.colors;
+const F = theme.fonts;
 
 const money = (value: number) =>
-  value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const paymentLabel = (method: PaymentMethod) => {
   if (method === 'pix') return 'Pix';
@@ -80,60 +84,42 @@ const paymentLabel = (method: PaymentMethod) => {
   return 'Cartão de crédito';
 };
 
-function SectionTitle({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <View style={styles.sectionHeading}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {!!subtitle && (
-        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-      )}
-    </View>
-  );
-}
+const shortDate = (date: Date) =>
+  date
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+    .replace(/\./g, '')
+    .replace(/ de /g, ' ');
+
+const SERVICE_ICONS: Record<ServiceId, keyof typeof Feather.glyphMap> = {
+  banho_tosa: 'scissors',
+  exames: 'activity',
+  vacinacao: 'shield',
+  emergencia: 'alert-circle',
+  leva_busca: 'truck',
+  consulta: 'heart',
+};
 
 function ActionRow({
   icon,
   title,
-  description,
   onPress,
   danger,
+  last,
 }: {
   icon: keyof typeof Feather.glyphMap;
   title: string;
-  description?: string;
-  onPress: () => void;
+  onPress?: () => void;
   danger?: boolean;
+  last?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={styles.actionRow}
+      style={[styles.actionRow, !last && styles.rowDivider]}
       activeOpacity={0.75}
       onPress={onPress}
     >
-      <View style={[styles.actionIcon, danger && styles.dangerIcon]}>
-        <Feather
-          name={icon}
-          size={19}
-          color={danger ? '#C24141' : BLUE}
-        />
-      </View>
-
-      <View style={styles.actionTextWrap}>
-        <Text style={[styles.actionTitle, danger && styles.dangerText]}>
-          {title}
-        </Text>
-
-        {!!description && (
-          <Text style={styles.actionDescription}>{description}</Text>
-        )}
-      </View>
-
+      <Feather name={icon} size={19} color={danger ? C.danger : C.primary} />
+      <Text style={[styles.actionTitle, danger && { color: C.danger }]}>{title}</Text>
       <Feather name="chevron-right" size={19} color="#9AA6B8" />
     </TouchableOpacity>
   );
@@ -142,39 +128,26 @@ function ActionRow({
 export default function PrivateMyPlanScreen({
   onBack,
   onNavigateToHome,
-  onNavigateToExplore,
   onNavigateToPlans,
   onNavigateToBenefits,
   onNavigateToProfile,
   onNavigateToManagePlan,
-  onNavigateToPaymentMethods,
   onNavigateToPets,
   onNavigateToInvoices,
+  onNavigateToSchedule,
+  onNavigateToChangePlan,
   subscription,
-  invoices = [],
-  benefitsUsage = [],
-  nextBillingDate,
+  appointments = [],
   onCancelSubscription,
   pets,
 }: Props) {
-  const [showCoverage, setShowCoverage] = useState(true);
-  const [showUsage, setShowUsage] = useState(false);
-  const [selectedPetId, setSelectedPetId] = useState<string | null>(
-    pets[0]?.id ?? null,
-  );
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(pets[0]?.id ?? null);
 
   // Se a lista mudar, mantém o pet selecionado se ele ainda existir.
   useEffect(() => {
     if (pets.length === 0) {
       setSelectedPetId(null);
-      return;
-    }
-
-    const selectedStillExists = pets.some(
-      (pet) => pet.id === selectedPetId,
-    );
-
-    if (!selectedStillExists) {
+    } else if (!pets.some((pet) => pet.id === selectedPetId)) {
       setSelectedPetId(pets[0].id);
     }
   }, [pets, selectedPetId]);
@@ -184,483 +157,280 @@ export default function PrivateMyPlanScreen({
     [pets, selectedPetId],
   );
 
-  // A assinatura só aparece se pertencer ao pet selecionado.
-  const petHasSubscription =
-    Boolean(
-      selectedPet &&
-      subscription &&
-      subscription.petName.trim().toLowerCase() ===
-        selectedPet.name.trim().toLowerCase(),
-    );
+  // O plano é por pet (N1).
+  const planId = selectedPet?.hasActivePlan ? getPlanId(selectedPet.plan) : null;
 
-  const currentSubscription = petHasSubscription ? subscription : null;
-  const hasPlan = Boolean(currentSubscription);
-  const isActive = currentSubscription?.status === 'paid';
+  // Detalhes da cobrança, quando a assinatura salva é deste pet.
+  const details =
+    selectedPet &&
+    subscription &&
+    subscription.petName.trim().toLowerCase() === selectedPet.name.trim().toLowerCase()
+      ? subscription
+      : null;
+
+  const isActive = !details || details.status === 'paid';
+
+  // Uso do mês: agendamentos deste pet no mês atual, sem os cancelados.
+  const usage = useMemo(() => {
+    const now = new Date();
+    const counts: Partial<Record<ServiceId, number>> = {};
+    appointments.forEach((item) => {
+      if (item.petId !== selectedPet?.id || item.status === 'cancelled') return;
+      const [year, month] = item.date.split('-').map(Number);
+      if (year !== now.getFullYear() || month !== now.getMonth() + 1) return;
+      const id = item.serviceId ?? 'consulta';
+      counts[id] = (counts[id] ?? 0) + 1;
+    });
+    return counts;
+  }, [appointments, selectedPet?.id]);
+
+  const coverage = planId ? PLAN_COVERAGE[planId] : {};
+  const coveredServices = SERVICES.filter((service) => coverage[service.id] !== undefined);
+  const lockedServices = SERVICES.filter((service) => coverage[service.id] === undefined);
+
+  const consultaQuota = coverage.consulta;
+  const consultaUsed = usage.consulta ?? 0;
+  const consultaExhausted = typeof consultaQuota === 'number' && consultaUsed >= consultaQuota;
+
+  // Preço exibido sempre por mês.
+  const monthlyPrice = details
+    ? details.billingCycle === 'yearly'
+      ? details.totalPrice / 12
+      : details.totalPrice
+    : null;
+
+  const paymentText = details
+    ? details.paymentMethod === 'card'
+      ? details.installments > 1
+        ? `em ${details.installments}x no cartão`
+        : 'no cartão'
+      : `no ${paymentLabel(details.paymentMethod)}`
+    : '';
+
+  const renewalDate = useMemo(() => {
+    if (!details?.startedAt) return null;
+    const date = new Date(details.startedAt);
+    if (details.billingCycle === 'yearly') date.setFullYear(date.getFullYear() + 1);
+    else date.setMonth(date.getMonth() + 1);
+    return shortDate(date);
+  }, [details?.startedAt, details?.billingCycle]);
+
+  const lockedText =
+    lockedServices.length > 2
+      ? `${lockedServices[0].name}, ${lockedServices[1].name.toLowerCase()} e mais`
+      : lockedServices.map((service) => service.name).join(' e ');
+
+  const goToChangePlan = () => {
+    if (selectedPet && onNavigateToChangePlan) onNavigateToChangePlan(selectedPet.id);
+    else onNavigateToPlans();
+  };
 
   const confirmCancel = () => {
     Alert.alert(
       'Cancelar plano',
       'O cancelamento encerra a renovação. O acesso aos benefícios continua até o fim do ciclo já pago. Deseja continuar?',
       [
-        {
-          text: 'Manter plano',
-          style: 'cancel',
-        },
-        {
-          text: 'Continuar',
-          style: 'destructive',
-          onPress: () => {
-            if (onCancelSubscription) {
-              onCancelSubscription();
-            } else {
-              Alert.alert(
-                'Solicitação não enviada',
-                'A ação de cancelamento ainda precisa ser conectada ao backend.',
-              );
-            }
-          },
-        },
+        { text: 'Manter plano', style: 'cancel' },
+        { text: 'Continuar', style: 'destructive', onPress: () => onCancelSubscription?.() },
       ],
-    );
-  };
-
-  const renderPetAvatar = (pet: Pet, size = 64) => {
-    if (pet.avatar) {
-      return (
-        <Image
-          source={{ uri: pet.avatar }}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          }}
-        />
-      );
-    }
-
-    return (
-      <View
-        style={[
-          styles.petAvatarFallback,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          },
-        ]}
-      >
-        <MaterialCommunityIcons
-          name="paw"
-          size={size * 0.48}
-          color={BLUE}
-        />
-      </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+      <PrivateHeader title="Meu Plano" onBack={onBack || onNavigateToHome} />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBack || onNavigateToHome}
-          >
-            <Feather name="arrow-left" size={22} color={NAVY} />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Meu Plano</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {pets.length === 0 ? (
-          <View style={styles.noPetsCard}>
-            <View style={styles.noPlanIcon}>
-              <MaterialCommunityIcons
-                name="paw"
-                size={44}
-                color={BLUE}
-              />
-            </View>
-
-            <Text style={styles.noPlanTitle}>
-              Você ainda não tem pets cadastrados
+          <View style={[styles.card, styles.emptyCard]}>
+            <PetAvatar size={72} />
+            <Text style={styles.emptyTitle}>Você ainda não tem pets cadastrados</Text>
+            <Text style={styles.emptyText}>
+              Para consultar ou contratar um plano, primeiro cadastre seu pet.
             </Text>
-
-            <Text style={styles.noPlanDescription}>
-              Para consultar ou contratar um plano, primeiro cadastre seu pet
-              na área Meus Pets.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={onNavigateToPets}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.primaryButtonText}>
-                CADASTRAR MEU PET
-              </Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={onNavigateToPets} activeOpacity={0.85}>
+              <Text style={styles.primaryButtonText}>Cadastrar meu pet</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <View style={styles.petSelectorSection}>
-              <SectionTitle
-                title="Selecione seu pet"
-                subtitle="Os planos são individuais para cada pet"
-              />
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.petSelectorList}
-              >
-                {pets.map((pet) => {
-                  const isSelected = pet.id === selectedPetId;
-
-                  return (
-                    <TouchableOpacity
-                      key={pet.id}
-                      style={[
-                        styles.petSelectorItem,
-                        isSelected && styles.petSelectorItemActive,
-                      ]}
-                      onPress={() => setSelectedPetId(pet.id)}
-                      activeOpacity={0.8}
-                    >
-                      {renderPetAvatar(pet, 48)}
-
-                      <Text
-                        style={[
-                          styles.petSelectorName,
-                          isSelected && styles.petSelectorNameActive,
-                        ]}
-                        numberOfLines={1}
-                      >
+            {/* Seletor de pets */}
+            <Text style={styles.sectionTitle}>Seus pets</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.petList}
+            >
+              {pets.map((pet) => {
+                const isSelected = pet.id === selectedPetId;
+                const petPlan = pet.hasActivePlan ? getPlanId(pet.plan) : null;
+                return (
+                  <TouchableOpacity
+                    key={pet.id}
+                    style={[styles.petPill, isSelected && styles.petPillActive]}
+                    onPress={() => setSelectedPetId(pet.id)}
+                    activeOpacity={0.8}
+                  >
+                    <PetAvatar
+                      species={pet.species}
+                      avatar={pet.avatar}
+                      size={32}
+                      background={isSelected ? C.card : C.primarySoft}
+                    />
+                    <View>
+                      <Text style={styles.petPillName} numberOfLines={1}>
                         {pet.name}
                       </Text>
+                      <Text style={[styles.petPillPlan, { color: petPlan ? C.success : C.warning }]}>
+                        {petPlan ? PLAN_NAMES[petPlan].replace('Plano ', '') : 'Sem plano'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-                      {isSelected && (
-                        <View style={styles.selectedIndicator}>
-                          <Feather
-                            name="check"
-                            size={11}
-                            color="#FFFFFF"
-                          />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
+            {selectedPet && !planId && (
+              /* Pet sem plano (E8) */
+              <View style={[styles.card, styles.emptyCard]}>
+                <PetAvatar species={selectedPet.species} avatar={selectedPet.avatar} size={72} />
+                <View style={styles.noPlanBadge}>
+                  <Text style={styles.noPlanBadgeText}>Sem plano</Text>
+                </View>
+                <Text style={styles.emptyTitle}>{selectedPet.name} ainda não tem plano</Text>
+                <Text style={styles.emptyText}>
+                  Contrate um plano para usar consultas, exames e banho e tosa.
+                </Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={onNavigateToPlans} activeOpacity={0.85}>
+                  <Text style={styles.primaryButtonText}>Contratar plano</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.textButton} onPress={onNavigateToPlans}>
+                  <Text style={styles.textButtonLabel}>Comparar planos</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {selectedPet && (
+            {selectedPet && planId && (
               <>
-                {hasPlan && currentSubscription ? (
-                  <>
-                    <View style={styles.planCard}>
-                      <View style={styles.planTopLine}>
-                        {renderPetAvatar(selectedPet, 66)}
+                {/* Card do plano */}
+                <View style={styles.card}>
+                  <View style={styles.planTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.eyebrow}>Plano de {selectedPet.name}</Text>
+                      <Text style={styles.planName}>{PLAN_NAMES[planId]}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, !isActive && styles.pendingBadge]}>
+                      <Text style={[styles.statusText, !isActive && { color: C.warning }]}>
+                        {isActive ? 'Ativo' : 'Pendente'}
+                      </Text>
+                    </View>
+                  </View>
 
-                        <View style={styles.planIdentity}>
-                          <Text style={styles.eyebrow}>
-                            PLANO PETVITALIZ
-                          </Text>
+                  {monthlyPrice !== null && details && (
+                    <>
+                      <Text style={styles.price}>
+                        {money(monthlyPrice)}
+                        <Text style={styles.priceUnit}> /mês</Text>
+                      </Text>
+                      <Text style={styles.priceNote}>
+                        {details.billingCycle === 'yearly'
+                          ? `Plano anual · ${money(details.totalPrice)} cobrado ${paymentText}`
+                          : `Plano mensal · cobrado ${paymentText}`}
+                      </Text>
 
-                          <Text style={styles.planName}>
-                            {currentSubscription.planName}
-                          </Text>
-
-                          <Text style={styles.petName}>
-                            Pet vinculado: {selectedPet.name}
-                          </Text>
-                        </View>
-
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            isActive
-                              ? styles.activeBadge
-                              : styles.pendingBadge,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.statusDot,
-                              {
-                                backgroundColor: isActive
-                                  ? GREEN
-                                  : '#C17A00',
-                              },
-                            ]}
-                          />
-
-                          <Text
-                            style={[
-                              styles.statusText,
-                              {
-                                color: isActive ? GREEN : '#9A6200',
-                              },
-                            ]}
-                          >
-                            {isActive ? 'Ativo' : 'Pendente'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.priceLine}>
-                        <Text style={styles.price}>
-                          {money(currentSubscription.totalPrice)}
-                        </Text>
-
-                        <Text style={styles.priceCycle}>
-                          {currentSubscription.billingCycle === 'yearly'
-                            ? 'valor anual'
-                            : 'por mês'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.planDivider} />
-
-                      <View style={styles.summaryGrid}>
-                        <View style={styles.summaryItem}>
-                          <Text style={styles.summaryLabel}>Ciclo</Text>
-                          <Text style={styles.summaryValue}>
-                            {currentSubscription.billingCycle === 'yearly'
-                              ? 'Anual'
-                              : 'Mensal'}
-                          </Text>
-                        </View>
-
-                        <View style={styles.summaryItem}>
-                          <Text style={styles.summaryLabel}>
-                            Pagamento
-                          </Text>
-                          <Text style={styles.summaryValue}>
-                            {paymentLabel(currentSubscription.paymentMethod)}
-                          </Text>
-                        </View>
-
-                        {!!nextBillingDate && (
-                          <View style={styles.summaryItem}>
-                            <Text style={styles.summaryLabel}>
-                              Próxima cobrança
-                            </Text>
-                            <Text style={styles.summaryValue}>
-                              {nextBillingDate}
-                            </Text>
+                      <View style={styles.planInfo}>
+                        {renewalDate && (
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.infoLabel}>Renova em</Text>
+                            <Text style={styles.infoValue}>{renewalDate}</Text>
                           </View>
                         )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.infoLabel}>Pagamento</Text>
+                          <Text style={styles.infoValue}>{paymentLabel(details.paymentMethod)}</Text>
+                        </View>
                       </View>
+                    </>
+                  )}
 
-                      {currentSubscription.billingCycle === 'yearly' &&
-                        currentSubscription.paymentMethod === 'card' &&
-                        currentSubscription.installments > 1 && (
-                          <Text style={styles.installmentText}>
-                            {currentSubscription.installments} parcelas no cartão
+                  {details?.scheduledChange && (
+                    <View style={styles.scheduledBox}>
+                      <Feather name="clock" size={14} color={C.navy} />
+                      <Text style={styles.scheduledText}>
+                        Muda para o {details.scheduledChange.planName} em{' '}
+                        {shortDate(new Date(details.scheduledChange.effectiveDate))}
+                      </Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.primaryButton, styles.scheduleButton, consultaExhausted && styles.disabledButton]}
+                    onPress={() => onNavigateToSchedule?.(selectedPet.id)}
+                    disabled={consultaExhausted}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="calendar" size={17} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>
+                      {consultaExhausted ? 'Cota de consultas esgotada' : 'Agendar consulta'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Uso do mês */}
+                <Text style={[styles.sectionTitle, styles.sectionSpacing]}>Uso do mês</Text>
+                <Text style={styles.sectionSubtitle}>As cotas renovam todo dia 1º</Text>
+                <View style={[styles.card, styles.listCard]}>
+                  {coveredServices.map((service, index) => {
+                    const quota = coverage[service.id]!;
+                    const used = usage[service.id] ?? 0;
+                    const exhausted = typeof quota === 'number' && used >= quota;
+                    const isLast = index === coveredServices.length - 1 && lockedServices.length === 0;
+                    return (
+                      <View key={service.id} style={[styles.usageRow, !isLast && styles.rowDivider]}>
+                        <View style={styles.usageTop}>
+                          <Feather name={SERVICE_ICONS[service.id]} size={15} color={C.primary} />
+                          <Text style={styles.usageName}>{service.name}</Text>
+                          <Text style={styles.usageCount}>
+                            {quota === 'ilimitado' ? 'Ilimitado' : `${Math.min(used, quota)} de ${quota}`}
                           </Text>
+                        </View>
+                        {typeof quota === 'number' && (
+                          <View style={styles.barTrack}>
+                            <View
+                              style={[
+                                styles.barFill,
+                                {
+                                  width: `${Math.max(Math.min(used / quota, 1) * 100, 4)}%` as `${number}%`,
+                                  backgroundColor: exhausted ? C.warning : C.primary,
+                                },
+                              ]}
+                            />
+                          </View>
                         )}
-                    </View>
-
-                    <View style={styles.section}>
-                      <View style={styles.sectionHeaderRow}>
-                        <SectionTitle
-                          title="Resumo da cobertura"
-                          subtitle={`Benefícios vinculados ao plano de ${selectedPet.name}`}
-                        />
-
-                        <TouchableOpacity
-                          onPress={() =>
-                            setShowCoverage((value) => !value)
-                          }
-                        >
-                          <Feather
-                            name={
-                              showCoverage ? 'chevron-up' : 'chevron-down'
-                            }
-                            size={21}
-                            color={BLUE}
-                          />
-                        </TouchableOpacity>
+                        {exhausted && <Text style={styles.exhaustedText}>Cota esgotada este mês</Text>}
                       </View>
+                    );
+                  })}
 
-                      {showCoverage && (
-                        <View style={styles.whiteCard}>
-                          {benefitsUsage.length > 0 ? (
-                            benefitsUsage.map((item, index) => (
-                              <View
-                                key={`${item.name}-${index}`}
-                                style={styles.coverageRow}
-                              >
-                                <View style={styles.coverageCheck}>
-                                  <Feather
-                                    name="check"
-                                    size={14}
-                                    color={GREEN}
-                                  />
-                                </View>
-
-                                <View style={styles.coverageTextWrap}>
-                                  <Text style={styles.coverageName}>
-                                    {item.name}
-                                  </Text>
-
-                                  <Text style={styles.coverageCount}>
-                                    {item.limit === null
-                                      ? 'Ilimitado'
-                                      : `${Math.max(
-                                          item.limit - item.used,
-                                          0,
-                                        )} de ${item.limit} disponíveis neste ciclo`}
-                                  </Text>
-                                </View>
-
-                                <Text style={styles.availableText}>
-                                  Disponível
-                                </Text>
-                              </View>
-                            ))
-                          ) : (
-                            <View style={styles.emptyInfo}>
-                              <Text style={styles.emptyInfoText}>
-                                As coberturas e cotas serão exibidas aqui
-                                conforme os dados do plano forem disponibilizados.
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.section}>
-                      <SectionTitle
-                        title="Gerenciar assinatura"
-                        subtitle="Acesse as configurações do seu plano"
-                      />
-
-                      <View style={styles.whiteCard}>
-                        <ActionRow
-                          icon="sliders"
-                          title="Gerenciar plano"
-                          description="Plano, ciclo de cobrança e cancelamento"
-                          onPress={() =>
-                            onNavigateToManagePlan?.()
-                          }
-                        />
-
-                        <View style={styles.rowDivider} />
-
-                        <ActionRow
-                          icon="credit-card"
-                          title="Forma de pagamento"
-                          description="Consultar ou adicionar cartões"
-                          onPress={() =>
-                            onNavigateToPaymentMethods?.()
-                          }
-                        />
-
-                        <View style={styles.rowDivider} />
-
-                        <ActionRow
-                          icon="file-text"
-                          title="Ver faturas"
-                          description="Faturas pagas e pendentes"
-                          onPress={() =>
-                            onNavigateToInvoices?.()
-                          }
-                        />
-
-                        <View style={styles.rowDivider} />
-
-                        <ActionRow
-                          icon="trending-up"
-                          title="Mudar de plano"
-                          description="Conhecer outras opções PetVitaliz"
-                          onPress={onNavigateToPlans}
-                        />
-
-                        <View style={styles.rowDivider} />
-
-                        <ActionRow
-                          icon="x-circle"
-                          title="Cancelar plano"
-                          description="O acesso permanece até o fim do ciclo pago"
-                          onPress={confirmCancel}
-                          danger
-                        />
-                      </View>
-                    </View>
-
-                    {showUsage && (
-                      <View style={styles.section}>
-                        <View style={styles.whiteCard}>
-                          {benefitsUsage.length > 0 ? (
-                            benefitsUsage.map((item, index) => (
-                              <View
-                                key={`usage-${item.name}-${index}`}
-                                style={styles.usageRow}
-                              >
-                                <Text style={styles.coverageName}>
-                                  {item.name}
-                                </Text>
-
-                                <Text style={styles.usageValue}>
-                                  {item.limit === null
-                                    ? `${item.used} utilizações`
-                                    : `${item.used}/${item.limit}`}
-                                </Text>
-                              </View>
-                            ))
-                          ) : (
-                            <Text style={styles.emptyInfoText}>
-                              Ainda não há registros de utilização disponíveis.
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    )}
-                  </>
-                ) : (
-                  <View style={styles.noPlanCard}>
-                    <View style={styles.noPlanIcon}>
-                      {renderPetAvatar(selectedPet, 60)}
-                    </View>
-
-                    <Text style={styles.noPlanTitle}>
-                      {selectedPet.name} ainda não tem um plano
-                    </Text>
-
-                    <Text style={styles.noPlanDescription}>
-                      Escolha um plano PetVitaliz para que {selectedPet.name}
-                      possa acessar consultas, exames e outros benefícios.
-                    </Text>
-
-                    <TouchableOpacity
-                      style={styles.primaryButton}
-                      onPress={onNavigateToPlans}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.primaryButtonText}>
-                        CONTRATAR PLANO
+                  {lockedServices.length > 0 && (
+                    <TouchableOpacity style={styles.lockedRow} onPress={goToChangePlan} activeOpacity={0.75}>
+                      <Feather name="lock" size={15} color={C.muted} />
+                      <Text style={styles.lockedText} numberOfLines={1}>
+                        {lockedText}
                       </Text>
+                      <Text style={styles.lockedLink}>Mudar de plano</Text>
                     </TouchableOpacity>
+                  )}
+                </View>
 
-                    <TouchableOpacity
-                      style={styles.textButton}
-                      onPress={onNavigateToPlans}
-                    >
-                      <Text style={styles.textButtonLabel}>
-                        Comparar planos
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                {/* Gerenciar assinatura */}
+                <Text style={[styles.sectionTitle, styles.sectionSpacing]}>Gerenciar assinatura</Text>
+                <View style={[styles.card, styles.listCard]}>
+                  <ActionRow icon="repeat" title="Mudar de plano" onPress={goToChangePlan} />
+                  <ActionRow icon="sliders" title="Ciclo e forma de pagamento" onPress={onNavigateToManagePlan} />
+                  <ActionRow icon="file-text" title="Ver faturas" onPress={onNavigateToInvoices} />
+                  <ActionRow icon="x-circle" title="Cancelar plano" onPress={confirmCancel} danger last />
+                </View>
               </>
             )}
           </>
@@ -670,7 +440,6 @@ export default function PrivateMyPlanScreen({
       <PrivateBottomNav
         currentRoute="PrivateMyPlan"
         onNavigateToHome={onNavigateToHome}
-        onNavigateToExplore={onNavigateToExplore}
         onNavigateToPlans={() => {}}
         onNavigateToBenefits={onNavigateToBenefits}
         onNavigateToProfile={onNavigateToProfile}
@@ -680,383 +449,122 @@ export default function PrivateMyPlanScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6F8FC',
-  },
-  scrollContent: {
-    paddingBottom: 112,
-  },
-  header: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF1F6',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 19,
-    fontFamily: 'PlusJakartaSans_700Bold',
-    color: NAVY,
-  },
-  headerSpacer: {
-    width: 40,
-  },
-  petSelectorSection: {
-    marginHorizontal: 18,
-    marginTop: 20,
-  },
-  petSelectorList: {
-    gap: 12,
-    paddingVertical: 12,
-  },
-  petSelectorItem: {
-    width: 92,
-    minHeight: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+  container: { flex: 1, backgroundColor: C.background },
+  // Espaço no fim para nada ficar escondido atrás da barra inferior.
+  scrollContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 130 },
+
+  sectionTitle: { fontSize: 16, fontFamily: F.bold, color: C.navy },
+  sectionSubtitle: { fontSize: 11, fontFamily: F.regular, color: C.muted, marginTop: 3, marginBottom: 10 },
+  sectionSpacing: { marginTop: 24 },
+
+  card: {
+    backgroundColor: C.card,
+    borderRadius: theme.radius.bigCard,
     borderWidth: 1,
-    borderColor: '#E8EDF5',
-    borderRadius: 15,
-    padding: 9,
-    position: 'relative',
-  },
-  petSelectorItemActive: {
-    borderColor: BLUE,
-    backgroundColor: '#F0F5FF',
-  },
-  petSelectorName: {
-    color: '#52627D',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 7,
-    maxWidth: 76,
-  },
-  petSelectorNameActive: {
-    color: NAVY,
-    fontWeight: '800',
-  },
-  selectedIndicator: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    backgroundColor: BLUE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  petAvatarFallback: {
-    backgroundColor: '#EAF0FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#DCE7FF',
-  },
-  planCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 18,
-    marginTop: 10,
+    borderColor: C.border,
     padding: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E8EDF5',
     elevation: 2,
     shadowColor: '#15294B',
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
-  planTopLine: {
+  listCard: { paddingVertical: 2, paddingHorizontal: 15, borderRadius: theme.radius.card, marginTop: 10 },
+
+  // Seletor de pets
+  petList: { gap: 8, paddingTop: 10, paddingBottom: 18 },
+  petPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  planIdentity: {
-    flex: 1,
-  },
-  eyebrow: {
-    fontSize: 9,
-    letterSpacing: 1,
-    color: '#8793A7',
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  planName: {
-    fontSize: 21,
-    color: NAVY,
-    marginTop: 3,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  petName: {
-    fontSize: 11,
-    color: MUTED,
-    marginTop: 3,
-    fontFamily: 'PlusJakartaSans_500Medium',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  activeBadge: {
-    backgroundColor: '#E8F7EF',
-  },
-  pendingBadge: {
-    backgroundColor: '#FFF4DB',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 10,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  priceLine: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 7,
-    marginTop: 20,
-  },
-  price: {
-    fontSize: 28,
-    color: BLUE,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  priceCycle: {
-    fontSize: 12,
-    color: MUTED,
-    fontFamily: 'PlusJakartaSans_500Medium',
-  },
-  planDivider: {
-    height: 1,
-    backgroundColor: '#EDF0F5',
-    marginVertical: 17,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 18,
-  },
-  summaryItem: {
-    minWidth: '42%',
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 10,
-    color: MUTED,
-    marginBottom: 5,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  summaryValue: {
-    fontSize: 12,
-    color: '#263B5E',
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  installmentText: {
-    fontSize: 10,
-    color: MUTED,
-    marginTop: 13,
-    fontFamily: 'PlusJakartaSans_500Medium',
-  },
-  section: {
-    marginHorizontal: 18,
-    marginTop: 23,
-  },
-  sectionHeading: {
-    flex: 1,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    color: NAVY,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  sectionSubtitle: {
-    fontSize: 10,
-    color: MUTED,
-    marginTop: 4,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  whiteCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 5,
+    gap: 8,
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: '#EDF0F5',
+    borderColor: C.border,
+    borderRadius: 24,
+    paddingVertical: 5,
+    paddingLeft: 5,
+    paddingRight: 14,
   },
-  coverageRow: {
+  petPillActive: { backgroundColor: C.primarySoft, borderColor: C.primary, borderWidth: 1.5 },
+  petPillName: { fontSize: 13, fontFamily: F.bold, color: C.navy, maxWidth: 110 },
+  petPillPlan: { fontSize: 11, fontFamily: F.semibold, marginTop: 1 },
+
+  // Card do plano
+  planTop: { flexDirection: 'row', alignItems: 'center' },
+  eyebrow: { fontSize: 11, fontFamily: F.medium, color: C.muted },
+  planName: { fontSize: 22, fontFamily: F.bold, color: C.navy, marginTop: 2 },
+  statusBadge: { backgroundColor: '#E7F6EF', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 4 },
+  pendingBadge: { backgroundColor: '#FFF4DE' },
+  statusText: { fontSize: 11, fontFamily: F.bold, color: C.success },
+  price: { fontSize: 26, fontFamily: F.bold, color: C.primary, marginTop: 14 },
+  priceUnit: { fontSize: 13, fontFamily: F.regular, color: C.muted },
+  priceNote: { fontSize: 11, fontFamily: F.regular, color: C.muted, marginTop: 2 },
+  planInfo: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: C.divider,
+    marginTop: 14,
+    paddingTop: 12,
+  },
+  infoLabel: { fontSize: 11, fontFamily: F.regular, color: C.muted },
+  infoValue: { fontSize: 13, fontFamily: F.bold, color: C.navy, marginTop: 3 },
+
+  scheduledBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
-    gap: 9,
+    gap: 8,
+    backgroundColor: C.primarySoft,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 14,
   },
-  coverageCheck: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
-    backgroundColor: '#E8F7EF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coverageTextWrap: {
-    flex: 1,
-  },
-  coverageName: {
-    fontSize: 12,
-    color: '#263B5E',
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  coverageCount: {
-    fontSize: 10,
-    color: MUTED,
-    marginTop: 3,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  availableText: {
-    color: GREEN,
-    fontSize: 10,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  emptyInfo: {
-    paddingVertical: 15,
-  },
-  emptyInfoText: {
-    fontSize: 11,
-    lineHeight: 18,
-    color: MUTED,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-    gap: 11,
-  },
-  actionIcon: {
-    width: 37,
-    height: 37,
-    borderRadius: 11,
-    backgroundColor: '#EEF3FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dangerIcon: {
-    backgroundColor: '#FFF0F0',
-  },
-  actionTextWrap: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 12,
-    color: '#263B5E',
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  actionDescription: {
-    fontSize: 10,
-    color: MUTED,
-    marginTop: 3,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  dangerText: {
-    color: '#C24141',
-  },
-  rowDivider: {
-    height: 1,
-    backgroundColor: '#F0F2F6',
-    marginLeft: 48,
-  },
-  usageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F2F6',
-  },
-  usageValue: {
-    fontSize: 12,
-    color: BLUE,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  noPetsCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 18,
-    marginTop: 40,
-    padding: 25,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  noPlanCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 18,
-    marginTop: 20,
-    padding: 25,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  noPlanIcon: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: '#EAF0FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 19,
-  },
-  noPlanTitle: {
-    fontSize: 19,
-    color: NAVY,
-    textAlign: 'center',
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
-  noPlanDescription: {
-    fontSize: 12,
-    lineHeight: 19,
-    color: MUTED,
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 22,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
+  scheduledText: { flex: 1, fontSize: 12, fontFamily: F.medium, color: C.navy },
+
+  // Botões
   primaryButton: {
-    backgroundColor: BLUE,
-    width: '100%',
-    minHeight: 49,
-    borderRadius: 12,
+    alignSelf: 'stretch',
+    minHeight: 48,
+    borderRadius: theme.radius.button,
+    backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 18,
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
+  scheduleButton: { flexDirection: 'row', gap: 8 },
+  disabledButton: { backgroundColor: '#A7B1C2' },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 13, fontFamily: F.bold },
+  textButton: { marginTop: 12, paddingVertical: 6 },
+  textButtonLabel: { color: C.primary, fontSize: 13, fontFamily: F.bold },
+
+  // Uso do mês
+  usageRow: { paddingVertical: 12 },
+  usageTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  usageName: { flex: 1, fontSize: 13, fontFamily: F.semibold, color: C.navy },
+  usageCount: { fontSize: 12, fontFamily: F.medium, color: C.muted },
+  barTrack: { height: 6, borderRadius: 3, backgroundColor: C.divider, marginTop: 8, overflow: 'hidden' },
+  barFill: { height: 6, borderRadius: 3 },
+  exhaustedText: { fontSize: 11, fontFamily: F.medium, color: C.warning, marginTop: 5 },
+  lockedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13 },
+  lockedText: { flex: 1, fontSize: 12, fontFamily: F.regular, color: C.muted },
+  lockedLink: { fontSize: 12, fontFamily: F.bold, color: C.primary },
+
+  // Lista de ações
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 15 },
+  actionTitle: { flex: 1, fontSize: 13, fontFamily: F.semibold, color: C.navy },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: C.divider },
+
+  // Estados vazios
+  emptyCard: { alignItems: 'center', paddingVertical: 26 },
+  emptyTitle: { fontSize: 17, fontFamily: F.bold, color: C.navy, textAlign: 'center', marginTop: 14 },
+  emptyText: {
     fontSize: 12,
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: F.regular,
+    color: C.muted,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 6,
+    paddingHorizontal: 8,
   },
-  textButton: {
-    padding: 14,
-  },
-  textButtonLabel: {
-    color: BLUE,
-    fontSize: 12,
-    fontFamily: 'PlusJakartaSans_700Bold',
-  },
+  noPlanBadge: { backgroundColor: '#FFF4DE', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3, marginTop: 10 },
+  noPlanBadgeText: { fontSize: 10, fontFamily: F.bold, color: C.warning },
 });
