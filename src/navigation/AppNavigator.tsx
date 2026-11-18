@@ -574,7 +574,7 @@ export default function AppNavigator() {
             onNavigateToPaymentMethods={() => push('PrivatePaymentMethods')}
             onNavigateToInvoices={() => push('PrivateInvoices')}
             onNavigateToPets={() => push('PrivatePetsFlow')}
-            onNavigateToSchedule={(petId) => openConsultations({ petId, serviceId: 'consulta' })}
+            onNavigateToSchedule={(petId) => openConsultations({ petId })}
             onNavigateToChangePlan={(petId) => openChangePlan(petId)}
             onCancelSubscription={() => {
               Alert.alert(
